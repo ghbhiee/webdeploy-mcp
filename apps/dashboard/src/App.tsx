@@ -38,10 +38,10 @@ export function App() {
       .catch(() => setSession({ authenticated: false }));
   }, []);
 
-  const show = (kind: "error" | "success", text: string) => {
+  const show = useCallback((kind: "error" | "success", text: string) => {
     setNotice({ kind, text });
     setTimeout(() => setNotice(null), 6000);
-  };
+  }, []);
 
   if (!session) return <Loading />;
   if (!session.authenticated) {
@@ -86,7 +86,11 @@ export function App() {
       ) : path === "/admin" && session.user?.isAdmin ? (
         <AdminPage show={show} />
       ) : (
-        <ProjectsPage navigate={navigate} show={show} />
+        <ProjectsPage
+          navigate={navigate}
+          show={show}
+          mcpUrl={session.mcpUrl ?? `${location.origin}/mcp`}
+        />
       )}
     </Shell>
   );
@@ -144,9 +148,11 @@ function Shell({
 function ProjectsPage({
   navigate,
   show,
+  mcpUrl,
 }: {
   navigate: (path: string) => void;
   show: (kind: "error" | "success", text: string) => void;
+  mcpUrl: string;
 }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +180,7 @@ function ProjectsPage({
           New project
         </button>
       </header>
+      <McpInstallPanel mcpUrl={mcpUrl} show={show} />
       {loading ? (
         <Loading />
       ) : projects.length ? (
@@ -212,6 +219,117 @@ function ProjectsPage({
         </Modal>
       )}
     </>
+  );
+}
+
+const OAUTH_SCOPES = "openid,profile,platform:read,projects:write,deployments:write,offline_access";
+
+function McpInstallPanel({
+  mcpUrl,
+  show,
+}: {
+  mcpUrl: string;
+  show: (kind: "error" | "success", text: string) => void;
+}) {
+  const codexCommand = `codex mcp add webdeploy --url ${mcpUrl} --oauth-resource ${mcpUrl}
+codex mcp login webdeploy --scopes ${OAUTH_SCOPES}`;
+  const claudeCommand = `claude mcp add --transport http --scope user webdeploy ${mcpUrl}`;
+  const agentPrompt = `Install the WebDeploy MCP server in this agent.
+
+Server name: webdeploy
+MCP URL: ${mcpUrl}
+
+Requirements:
+1. Detect the current client (Codex, Claude Code, or another MCP-capable agent).
+2. Install this as a user/global remote Streamable HTTP MCP server using the client's native configuration. Do not use a stdio bridge and do not ask me to paste an access token.
+3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. For Codex, use "codex mcp login webdeploy". For Claude Code, open "/mcp", select "webdeploy", and choose "Authenticate".
+4. Wait while I finish WebDeploy Passkey login and consent in the browser.
+5. After authorization, call the "platform_status" and "list_projects" tools to verify the connection.
+6. Report where the MCP configuration was saved and whether both verification calls succeeded.`;
+
+  return (
+    <section className="mcp-install-panel" aria-labelledby="mcp-install-title">
+      <div className="mcp-install-heading">
+        <div>
+          <p className="eyebrow">AI connection</p>
+          <h2 id="mcp-install-title">Install WebDeploy MCP</h2>
+          <p>
+            Use native remote HTTP support. Authentication opens WebDeploy in your browser—never
+            paste an access token into a config file.
+          </p>
+        </div>
+        <span className="protocol-badge">OAuth + PKCE</span>
+      </div>
+      <div className="mcp-client-grid">
+        <article className="mcp-client-card">
+          <div>
+            <span className="client-index">01</span>
+            <h3>Codex</h3>
+          </div>
+          <p>Run both commands. The login command immediately opens browser authentication.</p>
+          <CopyBlock label="Copy Codex commands" value={codexCommand} show={show} />
+        </article>
+        <article className="mcp-client-card">
+          <div>
+            <span className="client-index">02</span>
+            <h3>Claude Code</h3>
+          </div>
+          <p>
+            Add the server, open Claude Code, enter <code>/mcp</code>, then choose{" "}
+            <strong>webdeploy → Authenticate</strong>. Claude opens the browser.
+          </p>
+          <CopyBlock label="Copy Claude command" value={claudeCommand} show={show} />
+        </article>
+      </div>
+      <article className="agent-prompt-card">
+        <div className="agent-prompt-heading">
+          <div>
+            <span className="client-index">03</span>
+            <h3>Install from any Agent</h3>
+          </div>
+          <span>Recommended</span>
+        </div>
+        <p>
+          Paste this single prompt into your coding Agent. It tells the Agent to install,
+          authenticate in the browser, and verify the connection.
+        </p>
+        <CopyBlock label="Copy Agent install prompt" value={agentPrompt} show={show} large />
+      </article>
+    </section>
+  );
+}
+
+function CopyBlock({
+  label,
+  value,
+  show,
+  large = false,
+}: {
+  label: string;
+  value: string;
+  show: (kind: "error" | "success", text: string) => void;
+  large?: boolean;
+}) {
+  return (
+    <div className={`copy-block${large ? " large" : ""}`}>
+      <pre>
+        <code>{value}</code>
+      </pre>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            show("success", "Copied to clipboard.");
+          } catch {
+            show("error", "Clipboard access failed. Select and copy the text manually.");
+          }
+        }}
+      >
+        Copy
+      </button>
+    </div>
   );
 }
 

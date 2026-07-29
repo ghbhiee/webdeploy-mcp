@@ -2,6 +2,7 @@ export interface Session {
   authenticated: boolean;
   user?: { id: string; username: string; isAdmin: boolean; status: string };
   csrfToken?: string;
+  mcpUrl?: string;
 }
 
 let csrfToken = "";

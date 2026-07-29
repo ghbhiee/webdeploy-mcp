@@ -437,6 +437,23 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   expect(userList).toContain(username);
 
   await login(page, username);
+  await expect(page.getByRole("heading", { name: "Install WebDeploy MCP" })).toBeVisible();
+  const mcpUrl = `${process.env.TEST_BASE_URL}/mcp`;
+  await expect(
+    page.getByText(`codex mcp add webdeploy --url ${mcpUrl}`, { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(`claude mcp add --transport http --scope user webdeploy ${mcpUrl}`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Install from any Agent")).toBeVisible();
+  await expect(
+    page.getByText('call the "platform_status" and "list_projects" tools'),
+  ).toBeVisible();
+  const publicSession = await request.get("/api/auth/session");
+  expect((await publicSession.json()).mcpUrl).toBe(mcpUrl);
+
   await page.getByRole("button", { name: "New project" }).click();
   await page.getByLabel("Project name").fill("Passkey Test Site");
   await page

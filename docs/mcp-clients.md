@@ -6,15 +6,68 @@ OAuth protected-resource metadata and an authorization server rooted at `PUBLIC_
 ## Codex CLI
 
 ```bash
-codex mcp add webdeploy --url https://deploy.example.com/mcp
-codex mcp login webdeploy
+codex mcp add webdeploy \
+  --url https://deploy.example.com/mcp \
+  --oauth-resource https://deploy.example.com/mcp
+codex mcp login webdeploy \
+  --scopes openid,profile,platform:read,projects:write,deployments:write,offline_access
 ```
+
+The login command opens the system browser. Complete WebDeploy Passkey login and approve the
+requested scopes. Codex saves and refreshes the resulting OAuth credentials; do not put a bearer
+token in `config.toml`.
 
 Inspect or remove the connection with:
 
 ```bash
 codex mcp list
 codex mcp remove webdeploy
+```
+
+## Claude Code
+
+Add WebDeploy as a user-scoped remote HTTP server:
+
+```bash
+claude mcp add --transport http --scope user webdeploy https://deploy.example.com/mcp
+```
+
+Claude Code performs interactive OAuth from its MCP menu:
+
+1. Start Claude Code and enter `/mcp`.
+2. Select `webdeploy`.
+3. Choose **Authenticate**. The system browser opens automatically.
+4. Complete WebDeploy Passkey login and approve access.
+5. Return to Claude Code and use `/mcp` to confirm the server is connected.
+
+Inspect or remove the connection with:
+
+```bash
+claude mcp get webdeploy
+claude mcp remove --scope user webdeploy
+```
+
+Adding the server only writes its URL. The browser opens when **Authenticate** is selected from
+`/mcp`, which is the current Claude Code OAuth flow.
+
+## One-prompt Agent installation
+
+The Dashboard home page generates this prompt with the deployment's real MCP URL. For manual use,
+replace `<MCP_URL>` and paste the whole block into the Agent:
+
+```text
+Install the WebDeploy MCP server in this agent.
+
+Server name: webdeploy
+MCP URL: <MCP_URL>
+
+Requirements:
+1. Detect the current client (Codex, Claude Code, or another MCP-capable agent).
+2. Install this as a user/global remote Streamable HTTP MCP server using the client's native configuration. Do not use a stdio bridge and do not ask me to paste an access token.
+3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. For Codex, use "codex mcp login webdeploy". For Claude Code, open "/mcp", select "webdeploy", and choose "Authenticate".
+4. Wait while I finish WebDeploy Passkey login and consent in the browser.
+5. After authorization, call the "platform_status" and "list_projects" tools to verify the connection.
+6. Report where the MCP configuration was saved and whether both verification calls succeeded.
 ```
 
 ## ChatGPT web

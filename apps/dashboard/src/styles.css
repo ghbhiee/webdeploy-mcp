@@ -186,6 +186,154 @@ button {
   cursor: not-allowed;
   transform: none;
 }
+.mcp-install-panel {
+  position: relative;
+  margin: 0 0 38px;
+  padding: clamp(20px, 3vw, 30px);
+  overflow: hidden;
+  border: 1px solid #31506e;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, #21466488 0, transparent 25rem),
+    linear-gradient(145deg, #12243a, #0c1828);
+  box-shadow: 0 24px 70px #0003;
+}
+.mcp-install-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.mcp-install-heading h2 {
+  margin: 4px 0 9px;
+  font-size: clamp(25px, 3vw, 34px);
+  letter-spacing: -0.035em;
+}
+.mcp-install-heading p:not(.eyebrow) {
+  max-width: 720px;
+  margin: 0;
+  color: #a7b9cd;
+  line-height: 1.6;
+}
+.protocol-badge {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid #67e8b455;
+  border-radius: 999px;
+  color: var(--mint);
+  background: #67e8b410;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mcp-client-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+.mcp-client-card,
+.agent-prompt-card {
+  padding: 19px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #091522cc;
+}
+.mcp-client-card > div:first-child,
+.agent-prompt-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mcp-client-card h3,
+.agent-prompt-card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.mcp-client-card p,
+.agent-prompt-card > p {
+  min-height: 44px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.mcp-client-card code,
+.agent-prompt-card code {
+  color: #c8dbf2;
+}
+.client-index {
+  display: inline-grid;
+  place-items: center;
+  min-width: 29px;
+  height: 25px;
+  border: 1px solid #7ab7ff44;
+  border-radius: 8px;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+.copy-block {
+  position: relative;
+  margin-top: 14px;
+}
+.copy-block pre {
+  min-height: 94px;
+  margin: 0;
+  padding: 16px 72px 16px 16px;
+  overflow: auto;
+  border: 1px solid #233b54;
+  border-radius: 11px;
+  background: #050c15;
+  color: #cce0f7;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.copy-block.large pre {
+  max-height: 360px;
+}
+.copy-block button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 6px 9px;
+  border: 1px solid #38536f;
+  border-radius: 8px;
+  background: #14263a;
+  color: #c5d6e9;
+  font-size: 11px;
+  font-weight: 750;
+}
+.copy-block button:hover {
+  border-color: var(--blue);
+  color: white;
+}
+.agent-prompt-card {
+  margin-top: 14px;
+  border-color: #67e8b43d;
+  background: linear-gradient(145deg, #0a1b23, #091522);
+}
+.agent-prompt-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.agent-prompt-heading > span {
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--mint);
+  color: var(--mint-dark);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
@@ -660,6 +808,9 @@ td small {
   .content {
     padding: 34px 20px 70px;
   }
+  .mcp-client-grid {
+    grid-template-columns: 1fr;
+  }
   .auth-page {
     grid-template-columns: 1fr;
   }
@@ -681,6 +832,14 @@ td small {
   .page-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .mcp-install-heading {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .mcp-client-card p,
+  .agent-prompt-card > p {
+    min-height: auto;
   }
   .settings-grid,
   .two-column {

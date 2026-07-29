@@ -2,6 +2,20 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.1] - 2026-07-29
+
+### Added
+
+- Dashboard home-page commands for installing the remote MCP server in Codex and Claude Code
+- A single copy-ready Agent prompt that installs, opens browser OAuth, and verifies MCP tools
+- Server-provided MCP URL in the Dashboard session response for split Dashboard/MCP domains
+- Claude Code setup, authentication, inspection, removal, and troubleshooting documentation
+
+### Changed
+
+- Codex guidance now declares the OAuth resource and requested scopes explicitly
+- MCP installation guidance now distinguishes client configuration from browser authentication
+
 ## [0.1.0] - 2026-07-29
 
 ### Added

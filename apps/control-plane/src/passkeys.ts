@@ -256,14 +256,16 @@ export async function registerPasskeyRoutes(
 
   app.get("/api/auth/session", async (request) => {
     const session = await readSession(request, database, config);
+    const mcpUrl = `${config.MCP_PUBLIC_URL}/mcp`;
     return session
       ? {
           authenticated: true,
           user: session.actor,
           csrfToken: session.csrfToken,
           expiresAt: session.expiresAt,
+          mcpUrl,
         }
-      : { authenticated: false };
+      : { authenticated: false, mcpUrl };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {

@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.0 is the first public release. Test on a non-production server before
-> adopting it for critical workloads.
+> **Release status:** v0.1.1 adds guided Codex and Claude Code MCP installation. Test on a
+> non-production server before adopting it for critical workloads.
 
 ## What it provides
 
@@ -138,6 +138,10 @@ The previous release is not stopped until the candidate passes its health check 
 Environment values are write-only after submission. Even administrators and MCP clients receive
 only variable names, type, presence, and timestamps.
 
+The Dashboard home page shows the deployment's exact MCP URL, copy-ready Codex and Claude Code
+commands, and one universal Agent install prompt. Authentication always continues in the browser;
+access tokens are never copied into configuration.
+
 ## MCP clients
 
 The public endpoint is:
@@ -149,12 +153,46 @@ https://your-mcp-domain.example/mcp
 ### Codex CLI
 
 ```bash
-codex mcp add webdeploy --url https://your-mcp-domain.example/mcp
-codex mcp login webdeploy
+codex mcp add webdeploy \
+  --url https://your-mcp-domain.example/mcp \
+  --oauth-resource https://your-mcp-domain.example/mcp
+codex mcp login webdeploy \
+  --scopes openid,profile,platform:read,projects:write,deployments:write,offline_access
 ```
 
-The login command opens the OAuth flow, which requires an approved Passkey. These commands follow
-the current Codex MCP CLI interface; they are not ChatGPT web commands.
+The login command opens the system browser. Sign in with an approved WebDeploy Passkey, review the
+requested scopes, and approve access.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http --scope user webdeploy \
+  https://your-mcp-domain.example/mcp
+```
+
+Then open Claude Code, enter `/mcp`, select `webdeploy`, and choose **Authenticate**. Claude opens
+the system browser for WebDeploy Passkey login and consent. Claude stores and refreshes the OAuth
+credentials after approval.
+
+### One-prompt Agent installation
+
+Replace `<MCP_URL>` and paste this single prompt into Codex, Claude Code, or another MCP-capable
+coding Agent:
+
+```text
+Install the WebDeploy MCP server in this agent.
+
+Server name: webdeploy
+MCP URL: <MCP_URL>
+
+Requirements:
+1. Detect the current client (Codex, Claude Code, or another MCP-capable agent).
+2. Install this as a user/global remote Streamable HTTP MCP server using the client's native configuration. Do not use a stdio bridge and do not ask me to paste an access token.
+3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. For Codex, use "codex mcp login webdeploy". For Claude Code, open "/mcp", select "webdeploy", and choose "Authenticate".
+4. Wait while I finish WebDeploy Passkey login and consent in the browser.
+5. After authorization, call the "platform_status" and "list_projects" tools to verify the connection.
+6. Report where the MCP configuration was saved and whether both verification calls succeeded.
+```
 
 ### ChatGPT
 
@@ -167,7 +205,7 @@ where custom MCP apps are enabled:
 4. Sign in with an approved Passkey and approve the requested scopes.
 
 Menu wording and workspace eligibility can change; consult current OpenAI help if the options are
-not present. Additional clients are covered in [MCP clients](docs/mcp-clients.md).
+not present. Client-specific troubleshooting is covered in [MCP clients](docs/mcp-clients.md).
 
 ## MCP tools
 
@@ -296,7 +334,7 @@ browser tests, and shell syntax checks on Ubuntu.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.0
+## Known limitations in v0.1.1
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload
