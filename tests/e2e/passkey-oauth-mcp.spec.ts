@@ -89,6 +89,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const clientRegistration = await request.post("/oauth/register", {
     data: {
       client_name: "WebDeploy E2E",
+      application_type: "native",
       redirect_uris: ["http://127.0.0.1:9876/callback"],
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
