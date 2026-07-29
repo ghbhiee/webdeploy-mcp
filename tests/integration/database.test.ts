@@ -16,6 +16,7 @@ describeDatabase("PostgreSQL schema", () => {
 
   beforeAll(async () => {
     await migrate(connectionString!, new URL("../../migrations", import.meta.url).pathname);
+    await migrate(connectionString!, new URL("../../migrations", import.meta.url).pathname);
   });
   afterAll(async () => database.end());
 
@@ -36,6 +37,11 @@ describeDatabase("PostgreSQL schema", () => {
     await database.query("INSERT INTO project_settings(project_id) VALUES($1)", [project.id]);
     const rows = await database.query("SELECT owner_id FROM projects WHERE id=$1", [project.id]);
     expect(rows.rows[0].owner_id).toBe(user.id);
+  });
+
+  it("records migrations by full file name and remains idempotent", async () => {
+    const versions = await database.query("SELECT version FROM schema_migrations ORDER BY version");
+    expect(versions.rows).toEqual([{ version: "001_initial" }]);
   });
 
   it("allocates only one row per port", async () => {

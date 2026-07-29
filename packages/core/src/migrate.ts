@@ -18,7 +18,7 @@ export async function migrate(
       .filter((file) => /^\d+_.+\.sql$/.test(file))
       .sort();
     for (const file of files) {
-      const version = file.split("_", 1)[0]!;
+      const version = file.replace(/\.sql$/, "");
       const exists = await database.query("SELECT 1 FROM schema_migrations WHERE version = $1", [
         version,
       ]);
