@@ -1,0 +1,10 @@
+[Unit]
+Description=Check weekly for WebDeploy MCP updates
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

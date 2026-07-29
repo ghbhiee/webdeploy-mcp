@@ -1,0 +1,6 @@
+[Unit]
+Description=Update WebDeploy MCP
+
+[Service]
+Type=oneshot
+ExecStart=/etc/webdeploy/update.sh --non-interactive

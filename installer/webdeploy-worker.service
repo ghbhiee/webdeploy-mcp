@@ -1,0 +1,25 @@
+[Unit]
+Description=WebDeploy privileged deployment worker
+After=network-online.target postgresql.service nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/webdeploy/webdeploy.env
+WorkingDirectory=/opt/webdeploy/current
+ExecStart=/usr/bin/node /opt/webdeploy/current/apps/worker/dist/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/webdeploy /etc/nginx /run /etc/webdeploy /etc/passwd /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid
+ProtectHome=true
+RestrictSUIDSGID=false
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

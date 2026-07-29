@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+env_file="${WEBDEPLOY_ENV_FILE:-/etc/webdeploy/webdeploy.env}"
+[[ -r "$env_file" ]] || { echo "Cannot read $env_file" >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$env_file"
+set +a
+exec node /opt/webdeploy/current/apps/control-plane/dist/index.js
