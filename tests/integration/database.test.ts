@@ -80,7 +80,7 @@ describeDatabase("PostgreSQL schema", () => {
     });
 
     await expect(projects.get(stranger, project.id)).rejects.toMatchObject<AppError>({
-      code: "PROJECT_FORBIDDEN",
+      code: "PROJECT_ACCESS_DENIED",
     });
     await expect(projects.get(admin, project.id)).resolves.toMatchObject({ id: project.id });
     const metadata = await projects.listEnvironment(owner, project.id);
