@@ -14,7 +14,7 @@ done
 CONFIG_DIR="${WEBDEPLOY_CONFIG_DIR:-/etc/webdeploy}"
 if [[ -f "$CONFIG_DIR/webdeploy.env" ]]; then
   set -a
-  # shellcheck disable=SC1090
+  # shellcheck disable=SC1091
   source "$CONFIG_DIR/webdeploy.env"
   set +a
 fi
@@ -31,7 +31,9 @@ rm -f /etc/systemd/system/webdeploy-worker.service \
   /etc/systemd/system/webdeploy-update.service /etc/systemd/system/webdeploy-update.timer
 rm -f /etc/nginx/conf.d/webdeploy-control.conf /usr/local/bin/webdeploy \
   /usr/local/libexec/webdeploy-control
-nginx -t && systemctl reload nginx || true
+if nginx -t; then
+  systemctl reload nginx
+fi
 systemctl daemon-reload
 if [[ -d "$INSTALL_ROOT" && "$INSTALL_ROOT" != / && "$INSTALL_ROOT" != /opt ]]; then
   rm -rf -- "$INSTALL_ROOT"

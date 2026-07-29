@@ -27,11 +27,13 @@ jobs:
       WEBDEPLOY_ENV_FILE: /tmp/webdeploy.env
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-      - run: npm install --global pnpm@11.10.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
@@ -64,7 +66,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: pnpm test:e2e
       - if: failure()
-        run: cat /tmp/webdeploy-control.log
+        run: cat /tmp/webdeploy-control.log || true
       - if: always()
         uses: actions/upload-artifact@v4
         with:

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
 CONFIG_DIR="${WEBDEPLOY_CONFIG_DIR:-/etc/webdeploy}"
 set -a
-# shellcheck disable=SC1090
+# shellcheck disable=SC1091
 source "$CONFIG_DIR/webdeploy.env"
 set +a
 INSTALL_ROOT="${WEBDEPLOY_INSTALL_ROOT:-/opt/webdeploy}"

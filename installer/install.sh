@@ -61,8 +61,11 @@ case "${ID}:${VERSION_ID}" in
   *) echo "Supported systems: Ubuntu 22.04/24.04 and Debian 12. Found ${ID} ${VERSION_ID}." >&2; exit 1 ;;
 esac
 [[ "$(uname -m)" =~ ^(x86_64|aarch64)$ ]] || { echo "Supported architectures: x86_64 and arm64." >&2; exit 1; }
-[[ "$INTERNAL_PORT" =~ ^[0-9]+$ ]] && ((INTERNAL_PORT >= 1024 && INTERNAL_PORT <= 65535)) ||
-  { echo "Internal port must be between 1024 and 65535." >&2; exit 1; }
+if [[ ! "$INTERNAL_PORT" =~ ^[0-9]+$ ]] ||
+  ((INTERNAL_PORT < 1024 || INTERNAL_PORT > 65535)); then
+  echo "Internal port must be between 1024 and 65535." >&2
+  exit 1
+fi
 
 prompt() {
   local variable="$1" text="$2" default="$3" value
@@ -225,7 +228,7 @@ ENV
 chmod 0600 "$CONFIG_DIR/webdeploy.env"
 
 set -a
-# shellcheck disable=SC1090
+# shellcheck disable=SC1091
 source "$CONFIG_DIR/webdeploy.env"
 set +a
 (cd "$RELEASE_DIR"; node packages/core/dist/migrate.js)
