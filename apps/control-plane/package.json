@@ -1,0 +1,33 @@
+{
+  "name": "@webdeploy/control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --sourcemap --clean",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.0.2",
+    "@fastify/formbody": "8.0.2",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/multipart": "9.2.1",
+    "@fastify/rate-limit": "10.3.0",
+    "@fastify/static": "10.1.2",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@simplewebauthn/server": "13.3.2",
+    "@webdeploy/core": "workspace:*",
+    "fastify": "5.10.0",
+    "oidc-provider": "9.11.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.1.0",
+    "tsx": "4.20.3",
+    "tsup": "8.5.0",
+    "typescript": "5.8.3"
+  }
+}
