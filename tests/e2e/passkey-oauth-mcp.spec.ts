@@ -96,8 +96,9 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
       response_types: ["code"],
     },
   });
-  expect(clientRegistration.ok()).toBeTruthy();
-  const client = await clientRegistration.json();
+  const clientRegistrationBody = await clientRegistration.text();
+  expect(clientRegistration.ok(), clientRegistrationBody).toBeTruthy();
+  const client = JSON.parse(clientRegistrationBody);
   const verifier = randomBytes(48).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const state = randomBytes(18).toString("base64url");
