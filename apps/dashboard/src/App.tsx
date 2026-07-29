@@ -288,7 +288,10 @@ function McpInstallPanel({
               {agent.label} · {method.label}
             </h3>
           </div>
-          <code>{catalog.mcpUrl}</code>
+          <div className="mcp-selected-meta">
+            <code>{catalog.serverName}</code>
+            <code>{catalog.mcpUrl}</code>
+          </div>
         </div>
         <CopyBlock
           label={`Copy ${agent.label} ${method.label}`}
@@ -297,6 +300,7 @@ function McpInstallPanel({
 
 Agent: ${agent.label}
 Method: ${method.label}
+MCP name: ${catalog.serverName}
 MCP endpoint: ${catalog.mcpUrl}
 
 ${method.content}

@@ -439,12 +439,13 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   await login(page, username);
   await expect(page.getByRole("heading", { name: "Install WebDeploy MCP" })).toBeVisible();
   const mcpUrl = `${process.env.TEST_BASE_URL}/mcp`;
+  const mcpName = `webdeploy-${new URL(process.env.TEST_BASE_URL!).hostname.replaceAll(".", "-")}`;
   await expect(
-    page.getByText(`codex mcp add webdeploy --url ${mcpUrl}`, { exact: false }),
+    page.getByText(`codex mcp add ${mcpName} --url ${mcpUrl}`, { exact: false }),
   ).toBeVisible();
   await page.getByLabel("Agent", { exact: true }).selectOption("claude");
   await expect(
-    page.getByText(`claude mcp add --transport http --scope user webdeploy ${mcpUrl}`, {
+    page.getByText(`claude mcp add --transport http --scope user ${mcpName} ${mcpUrl}`, {
       exact: true,
     }),
   ).toBeVisible();
@@ -453,14 +454,15 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
     page.getByText("Install WebDeploy MCP in this Claude Code session.", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Download webdeploy-mcp-claude-prompt.txt" }),
+    page.getByRole("button", { name: `Download ${mcpName}-claude-prompt.txt` }),
   ).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download webdeploy-mcp-claude-prompt.txt" }).click();
-  expect((await downloadPromise).suggestedFilename()).toBe("webdeploy-mcp-claude-prompt.txt");
+  await page.getByRole("button", { name: `Download ${mcpName}-claude-prompt.txt` }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe(`${mcpName}-claude-prompt.txt`);
   const publicSession = await request.get("/api/auth/session");
   const publicSessionBody = await publicSession.json();
   expect(publicSessionBody.mcpUrl).toBe(mcpUrl);
+  expect(publicSessionBody.mcpInstall.serverName).toBe(mcpName);
   expect(publicSessionBody.mcpInstall.agents).toHaveLength(3);
 
   await page.getByRole("button", { name: "New project" }).click();

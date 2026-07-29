@@ -8,6 +8,7 @@ describe("configuration", () => {
       DATABASE_URL: "postgresql://example",
     });
     expect(config.MCP_PUBLIC_URL).toBe("https://deploy.example.com");
+    expect(config.MCP_SERVER_NAME).toBe("webdeploy-deploy-example-com");
   });
 
   it("rejects inverted port ranges", () => {

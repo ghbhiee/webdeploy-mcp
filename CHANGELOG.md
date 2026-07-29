@@ -2,6 +2,21 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.3] - 2026-07-29
+
+### Added
+
+- One-command quick install using a single positional domain
+- Per-domain MCP names across server metadata, CLI, Dashboard, Codex, and Claude Code
+- Installer `--plan` validation mode
+- DNS preflight before installation changes
+
+### Changed
+
+- Existing Nginx installations are reused; Nginx is installed only when absent
+- Disabling Nginx also disables installer-managed HTTPS
+- Interactive reads use the terminal instead of piped script input
+
 ## [0.1.2] - 2026-07-29
 
 ### Added

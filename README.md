@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.2 adds domain-aware MCP installation from the installer, CLI, and
-> Dashboard. Test on a non-production server before adopting it for critical workloads.
+> **Release status:** v0.1.3 provides one-command domain installation, existing-Nginx reuse, and
+> per-domain MCP names. Test on a non-production server before critical use.
 
 ## What it provides
 
@@ -62,40 +62,31 @@ See [Architecture](docs/architecture.md) and [Security](SECURITY.md).
 The installer provisions Node.js 24, pnpm, PM2, Nginx, Certbot, PostgreSQL, Git, Python, and
 `mise`. Docker and Caddy are neither required nor used.
 
-## One-click installation
+## One-command installation
 
-The review-first method is recommended:
+First point a real, unused hostname at the server. Then run one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ghbhiee/webdeploy-mcp/main/install.sh | sudo bash -s -- deploy.your-domain.com
+```
+
+Replace `deploy.your-domain.com`; it is not a literal example to reuse. Quick installation uses
+that hostname for the Dashboard and MCP, derives a unique MCP name such as
+`webdeploy-deploy-your-domain-com`, enables HTTPS and auto-update, and uses `admin` as the initial
+identity.
+
+If Nginx already exists, WebDeploy reuses it and adds its own configuration. If Nginx is absent,
+the installer installs it. It never replaces an unrelated virtual host with the same hostname, so
+use a new hostname for WebDeploy.
+
+Download-first installation uses the same short form:
 
 ```bash
 curl -fsSLO https://github.com/ghbhiee/webdeploy-mcp/releases/latest/download/install.sh
-curl -fsSLO https://github.com/ghbhiee/webdeploy-mcp/releases/latest/download/SHA256SUMS
-sha256sum -c --ignore-missing SHA256SUMS
-less install.sh
-sudo bash install.sh
+sudo bash install.sh deploy.your-domain.com
 ```
 
-Or run the bootstrap directly:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ghbhiee/webdeploy-mcp/main/install.sh | sudo bash
-```
-
-The public domain is required during installation. The interactive installer asks for it; the MCP
-domain defaults to the same value but can be overridden. Installation stops if the selected port
-or Nginx `server_name` is already in use.
-
-For unattended installation:
-
-```bash
-sudo bash install.sh \
-  --non-interactive \
-  --domain deploy.example.com \
-  --admin admin@example.com \
-  --acme-email admin@example.com \
-  --auto-update
-```
-
-Substitute domains and identities with your own values. None are compiled into the project.
+Run `sudo bash install.sh --help` for advanced overrides.
 
 At completion, the installer prints the MCP setup for Codex, Claude Code, and other Agents and
 saves the same guide to `/etc/webdeploy/mcp-install.txt`. View or save it again at any time:
@@ -162,10 +153,10 @@ https://your-mcp-domain.example/mcp
 ### Codex CLI
 
 ```bash
-codex mcp add webdeploy \
+codex mcp add webdeploy-your-mcp-domain-example \
   --url https://your-mcp-domain.example/mcp \
   --oauth-resource https://your-mcp-domain.example/mcp
-codex mcp login webdeploy \
+codex mcp login webdeploy-your-mcp-domain-example \
   --scopes openid,profile,platform:read,projects:write,deployments:write,offline_access
 ```
 
@@ -175,11 +166,12 @@ requested scopes, and approve access.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http --scope user webdeploy \
+claude mcp add --transport http --scope user webdeploy-your-mcp-domain-example \
   https://your-mcp-domain.example/mcp
 ```
 
-Then open Claude Code, enter `/mcp`, select `webdeploy`, and choose **Authenticate**. Claude opens
+Then open Claude Code, enter `/mcp`, select `webdeploy-your-mcp-domain-example`, and choose
+**Authenticate**. Claude opens
 the system browser for WebDeploy Passkey login and consent. Claude stores and refreshes the OAuth
 credentials after approval.
 
@@ -191,13 +183,13 @@ coding Agent:
 ```text
 Install the WebDeploy MCP server in this agent.
 
-Server name: webdeploy
+Server name: webdeploy-your-mcp-domain-example
 MCP URL: <MCP_URL>
 
 Requirements:
 1. Detect the current client (Codex, Claude Code, or another MCP-capable agent).
 2. Install this as a user/global remote Streamable HTTP MCP server using the client's native configuration. Do not use a stdio bridge and do not ask me to paste an access token.
-3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. For Codex, use "codex mcp login webdeploy". For Claude Code, open "/mcp", select "webdeploy", and choose "Authenticate".
+3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. Use the server name shown above for every client command and authentication selection.
 4. Wait while I finish WebDeploy Passkey login and consent in the browser.
 5. After authorization, call the "platform_status" and "list_projects" tools to verify the connection.
 6. Report where the MCP configuration was saved and whether both verification calls succeeded.
@@ -343,7 +335,7 @@ browser tests, and shell syntax checks on Ubuntu.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.2
+## Known limitations in v0.1.3
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload

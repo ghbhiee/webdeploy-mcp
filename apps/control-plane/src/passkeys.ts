@@ -263,7 +263,7 @@ export async function registerPasskeyRoutes(
 
   app.get("/api/auth/session", async (request) => {
     const session = await readSession(request, database, config);
-    const mcpInstall = createMcpInstallCatalog(config.MCP_PUBLIC_URL);
+    const mcpInstall = createMcpInstallCatalog(config.MCP_PUBLIC_URL, config.MCP_SERVER_NAME);
     return session
       ? {
           authenticated: true,

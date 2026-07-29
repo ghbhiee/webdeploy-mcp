@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { deriveMcpServerName } from "./mcp-install.js";
 
 const booleanString = z
   .enum(["true", "false"])
@@ -12,6 +13,10 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3847),
   PUBLIC_URL: z.string().url(),
   MCP_PUBLIC_URL: z.string().url().optional(),
+  MCP_SERVER_NAME: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]{0,63}$/)
+    .optional(),
   DATABASE_URL: z.string().min(1),
   DATA_DIR: z.string().default("/var/lib/webdeploy"),
   CONFIG_DIR: z.string().default("/etc/webdeploy"),
@@ -33,11 +38,15 @@ const schema = z.object({
   RUNTIME_MANAGER: z.enum(["mise", "system"]).default("mise"),
 });
 
-export type Config = Omit<z.infer<typeof schema>, "MCP_PUBLIC_URL"> & { MCP_PUBLIC_URL: string };
+export type Config = Omit<z.infer<typeof schema>, "MCP_PUBLIC_URL" | "MCP_SERVER_NAME"> & {
+  MCP_PUBLIC_URL: string;
+  MCP_SERVER_NAME: string;
+};
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.parse(env);
   if (!parsed.MCP_PUBLIC_URL) parsed.MCP_PUBLIC_URL = parsed.PUBLIC_URL;
+  if (!parsed.MCP_SERVER_NAME) parsed.MCP_SERVER_NAME = deriveMcpServerName(parsed.MCP_PUBLIC_URL);
   if (parsed.PORT_RANGE_START > parsed.PORT_RANGE_END) {
     throw new Error("PORT_RANGE_START must be less than or equal to PORT_RANGE_END");
   }

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="${WEBDEPLOY_VERSION:-v0.1.2}"
+VERSION="${WEBDEPLOY_VERSION:-v0.1.3}"
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 INSTALL_ROOT="/opt/webdeploy"
 DATA_DIR="/var/lib/webdeploy"
 CONFIG_DIR="/etc/webdeploy"
 DASHBOARD_DOMAIN=""
 MCP_DOMAIN=""
+MCP_SERVER_NAME=""
 INTERNAL_PORT="3847"
 ADMIN_IDENTITY=""
 ACME_EMAIL=""
@@ -15,12 +16,21 @@ CONFIGURE_NGINX="yes"
 CONFIGURE_HTTPS="yes"
 AUTO_UPDATE="no"
 NON_INTERACTIVE="no"
+PLAN_ONLY="no"
 MISE_VERSION="v2026.7.16"
 
 usage() {
   cat <<'USAGE'
 Usage: sudo bash installer/install.sh [options]
+       curl -fsSL .../install.sh | sudo bash -s -- DOMAIN
+
+Quick install:
+  DOMAIN                       Use one domain, existing Nginx when present,
+                               HTTPS, admin identity "admin", and auto-update
+
+Advanced options:
   --domain HOSTNAME             Dashboard and MCP domain
+  --mcp-name NAME               MCP client name (default: derived from domain)
   --install-dir PATH
   --data-dir PATH
   --dashboard-domain HOSTNAME   Dashboard domain override
@@ -32,12 +42,22 @@ Usage: sudo bash installer/install.sh [options]
   --no-https
   --auto-update
   --non-interactive
+  --plan                        Validate and print the plan without changes
 USAGE
 }
+
+if (($#)) && [[ "$1" != -* ]]; then
+  NON_INTERACTIVE="yes"
+  AUTO_UPDATE="yes"
+  DASHBOARD_DOMAIN="$1"
+  MCP_DOMAIN="$1"
+  shift
+fi
 
 while (($#)); do
   case "$1" in
     --domain) DASHBOARD_DOMAIN="$2"; MCP_DOMAIN="$2"; shift 2 ;;
+    --mcp-name) MCP_SERVER_NAME="$2"; shift 2 ;;
     --install-dir) INSTALL_ROOT="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --dashboard-domain) DASHBOARD_DOMAIN="$2"; shift 2 ;;
@@ -45,10 +65,11 @@ while (($#)); do
     --port) INTERNAL_PORT="$2"; shift 2 ;;
     --admin) ADMIN_IDENTITY="$2"; shift 2 ;;
     --acme-email) ACME_EMAIL="$2"; shift 2 ;;
-    --no-nginx) CONFIGURE_NGINX="no"; shift ;;
+    --no-nginx) CONFIGURE_NGINX="no"; CONFIGURE_HTTPS="no"; shift ;;
     --no-https) CONFIGURE_HTTPS="no"; shift ;;
     --auto-update) AUTO_UPDATE="yes"; shift ;;
     --non-interactive) NON_INTERACTIVE="yes"; shift ;;
+    --plan) PLAN_ONLY="yes"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -74,7 +95,10 @@ prompt() {
   if [[ "$NON_INTERACTIVE" == yes ]]; then
     value="${!variable:-$default}"
   else
-    read -r -p "$text [$default]: " value
+    read -r -p "$text [$default]: " value </dev/tty || {
+      echo "Interactive input is unavailable. Pass a domain after the one-line installer." >&2
+      exit 2
+    }
     value="${value:-$default}"
   fi
   printf -v "$variable" '%s' "$value"
@@ -89,7 +113,10 @@ prompt_required() {
     }
   else
     while [[ -z "$value" ]]; do
-      read -r -p "$text (required): " value
+      read -r -p "$text (required): " value </dev/tty || {
+        echo "Interactive input is unavailable. Pass a domain after the one-line installer." >&2
+        exit 2
+      }
     done
   fi
   printf -v "$variable" '%s' "$value"
@@ -97,7 +124,13 @@ prompt_required() {
 yesno() {
   local variable="$1" text="$2" default="$3" value
   if [[ "$NON_INTERACTIVE" == yes ]]; then value="${!variable:-$default}"
-  else read -r -p "$text [$default]: " value; value="${value:-$default}"; fi
+  else
+    read -r -p "$text [$default]: " value </dev/tty || {
+      echo "Interactive input is unavailable. Pass a domain after the one-line installer." >&2
+      exit 2
+    }
+    value="${value:-$default}"
+  fi
   [[ "$value" =~ ^([Yy][Ee][Ss]|[Yy])$ ]] && value=yes || value=no
   printf -v "$variable" '%s' "$value"
 }
@@ -117,6 +150,27 @@ valid_hostname='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-
 [[ "$DASHBOARD_DOMAIN" =~ $valid_hostname && "$MCP_DOMAIN" =~ $valid_hostname ]] ||
   { echo "Dashboard and MCP domains must be valid fully-qualified hostnames." >&2; exit 1; }
 
+if [[ -z "$MCP_SERVER_NAME" ]]; then
+  mcp_slug="webdeploy-${MCP_DOMAIN,,}"
+  mcp_slug="${mcp_slug//[^a-z0-9_-]/-}"
+  if ((${#mcp_slug} > 64)); then
+    mcp_hash="$(printf '%s' "$MCP_DOMAIN" | sha256sum | cut -c1-8)"
+    mcp_slug="${mcp_slug:0:55}-$mcp_hash"
+  fi
+  MCP_SERVER_NAME="$mcp_slug"
+fi
+[[ "$MCP_SERVER_NAME" =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]] ||
+  { echo "MCP name must match ^[a-z0-9][a-z0-9_-]{0,63}$." >&2; exit 1; }
+
+if [[ "$CONFIGURE_HTTPS" == yes ]]; then
+  for domain in "$DASHBOARD_DOMAIN" "$MCP_DOMAIN"; do
+    getent ahosts "$domain" >/dev/null 2>&1 || {
+      echo "DNS for $domain does not resolve. Create its DNS record, then rerun installation." >&2
+      exit 1
+    }
+  done
+fi
+
 if ss -ltnH "sport = :$INTERNAL_PORT" | grep -q .; then
   echo "Port $INTERNAL_PORT is already in use. Choose another internal port." >&2
   exit 1
@@ -130,6 +184,24 @@ if [[ "$CONFIGURE_NGINX" == yes ]] && command -v nginx >/dev/null; then
     fi
   done
 fi
+
+if [[ "$CONFIGURE_NGINX" == no ]]; then
+  nginx_plan="disabled"
+elif command -v nginx >/dev/null 2>&1; then
+  nginx_plan="reuse existing $(nginx -v 2>&1)"
+else
+  nginx_plan="install"
+fi
+cat <<PLAN
+Installation plan
+  Dashboard: https://$DASHBOARD_DOMAIN/
+  MCP name: $MCP_SERVER_NAME
+  MCP URL: https://$MCP_DOMAIN/mcp
+  Nginx: $nginx_plan
+  HTTPS: $CONFIGURE_HTTPS
+  Auto-update: $AUTO_UPDATE
+PLAN
+[[ "$PLAN_ONLY" == yes ]] && exit 0
 
 SOURCE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_DIR="$INSTALL_ROOT/releases/$VERSION"
@@ -145,8 +217,17 @@ trap rollback EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git gnupg jq openssl build-essential unzip \
-  nginx certbot python3-certbot-nginx postgresql postgresql-client
+packages=(ca-certificates curl git gnupg jq openssl build-essential unzip postgresql postgresql-client)
+if [[ "$CONFIGURE_NGINX" == yes ]] && ! command -v nginx >/dev/null 2>&1; then
+  packages+=(nginx)
+fi
+if [[ "$CONFIGURE_HTTPS" == yes ]] && ! command -v certbot >/dev/null 2>&1; then
+  packages+=(certbot python3-certbot-nginx)
+elif [[ "$CONFIGURE_HTTPS" == yes ]] &&
+  ! certbot plugins 2>/dev/null | grep -qE '(^|[[:space:]])nginx([[:space:]]|$)'; then
+  packages+=(python3-certbot-nginx)
+fi
+apt-get install -y "${packages[@]}"
 
 node_major=0
 if command -v node >/dev/null; then node_major="$(node -p 'process.versions.node.split(".")[0]')"; fi
@@ -220,6 +301,7 @@ HOST=127.0.0.1
 PORT=$INTERNAL_PORT
 PUBLIC_URL=https://$DASHBOARD_DOMAIN
 MCP_PUBLIC_URL=https://$MCP_DOMAIN
+MCP_SERVER_NAME=$MCP_SERVER_NAME
 DATABASE_URL=$database_url
 DATA_DIR=$DATA_DIR
 CONFIG_DIR=$CONFIG_DIR
@@ -343,6 +425,7 @@ WebDeploy MCP $VERSION installed successfully.
 
 Dashboard: https://$DASHBOARD_DOMAIN/
 MCP endpoint: https://$MCP_DOMAIN/mcp
+MCP name: $MCP_SERVER_NAME
 
 1. Open the Dashboard and register a Passkey for: $ADMIN_IDENTITY
 2. List requests:  sudo webdeploy auth list-pending

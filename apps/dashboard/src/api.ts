@@ -7,6 +7,7 @@ export interface Session {
 }
 
 export interface McpInstallCatalog {
+  serverName: string;
   mcpUrl: string;
   agents: McpInstallAgent[];
 }

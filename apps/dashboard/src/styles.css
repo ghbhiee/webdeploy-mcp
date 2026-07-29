@@ -281,8 +281,14 @@ button {
   margin: 0;
   font-size: 18px;
 }
-.mcp-selected-heading > code {
+.mcp-selected-meta {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
   max-width: 52%;
+}
+.mcp-selected-meta code {
+  max-width: 100%;
   overflow: hidden;
   color: #c8dbf2;
   font-size: 11px;
@@ -859,7 +865,11 @@ td small {
     align-items: flex-start;
     flex-direction: column;
   }
-  .mcp-selected-heading > code {
+  .mcp-selected-meta {
+    max-width: 100%;
+    justify-items: start;
+  }
+  .mcp-selected-meta code {
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;

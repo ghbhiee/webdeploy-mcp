@@ -18,23 +18,35 @@ export interface McpInstallAgent {
 }
 
 export interface McpInstallCatalog {
+  serverName: string;
   mcpUrl: string;
   agents: McpInstallAgent[];
 }
 
 const OAUTH_SCOPES = "openid,profile,platform:read,projects:write,deployments:write,offline_access";
 
-export function createMcpInstallCatalog(publicMcpUrl: string): McpInstallCatalog {
+export function deriveMcpServerName(publicMcpUrl: string): string {
+  const hostname = new URL(publicMcpUrl).hostname.toLowerCase();
+  const slug = hostname.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `webdeploy-${slug}`.slice(0, 64).replace(/-$/, "");
+}
+
+export function createMcpInstallCatalog(
+  publicMcpUrl: string,
+  configuredName?: string,
+): McpInstallCatalog {
   const mcpUrl = `${publicMcpUrl.replace(/\/+$/, "")}/mcp`;
-  const codexCommand = `codex mcp add webdeploy --url ${mcpUrl} --oauth-resource ${mcpUrl}
-codex mcp login webdeploy --scopes ${OAUTH_SCOPES}`;
-  const claudeCommand = `claude mcp add --transport http --scope user webdeploy ${mcpUrl}`;
-  const basePrompt = `Server name: webdeploy
+  const serverName = configuredName ?? deriveMcpServerName(publicMcpUrl);
+  const codexCommand = `codex mcp add ${serverName} --url ${mcpUrl} --oauth-resource ${mcpUrl}
+codex mcp login ${serverName} --scopes ${OAUTH_SCOPES}`;
+  const claudeCommand = `claude mcp add --transport http --scope user ${serverName} ${mcpUrl}`;
+  const basePrompt = `Server name: ${serverName}
 MCP URL: ${mcpUrl}
 
 Install it as a user-level remote Streamable HTTP MCP server. Use the client's native OAuth Authorization Code + PKCE flow; never ask me to paste an access token. Open the system browser for WebDeploy Passkey login and consent. Wait for me to approve access, then call "platform_status" and "list_projects" to verify the connection. Report the saved configuration location and verification result.`;
 
   return {
+    serverName,
     mcpUrl,
     agents: [
       {
@@ -48,7 +60,7 @@ Install it as a user-level remote Streamable HTTP MCP server. Use the client's n
             description: "Copy both commands into a terminal.",
             content: codexCommand,
             nextStep: "The second command opens the browser. Complete Passkey login and consent.",
-            fileName: "webdeploy-mcp-codex-command.txt",
+            fileName: `${serverName}-codex-command.txt`,
           },
           {
             id: "prompt",
@@ -61,18 +73,18 @@ ${basePrompt}
 Use these native commands:
 ${codexCommand}`,
             nextStep: "Keep the Agent session open while you complete browser authentication.",
-            fileName: "webdeploy-mcp-codex-prompt.txt",
+            fileName: `${serverName}-codex-prompt.txt`,
           },
           {
             id: "manual",
             label: "Manual config",
             description: "Add this block to the Codex user configuration.",
             content: `# ~/.codex/config.toml
-[mcp_servers.webdeploy]
+[mcp_servers.${serverName}]
 url = "${mcpUrl}"
 oauth_resource = "${mcpUrl}"`,
-            nextStep: `Save the file, then run: codex mcp login webdeploy --scopes ${OAUTH_SCOPES}`,
-            fileName: "webdeploy-mcp-codex-manual.txt",
+            nextStep: `Save the file, then run: codex mcp login ${serverName} --scopes ${OAUTH_SCOPES}`,
+            fileName: `${serverName}-codex-manual.txt`,
           },
         ],
       },
@@ -86,9 +98,8 @@ oauth_resource = "${mcpUrl}"`,
             label: "CLI command",
             description: "Copy the command into a terminal.",
             content: claudeCommand,
-            nextStep:
-              "Open Claude Code, enter /mcp, select webdeploy, and choose Authenticate. Claude then opens the browser.",
-            fileName: "webdeploy-mcp-claude-command.txt",
+            nextStep: `Open Claude Code, enter /mcp, select ${serverName}, and choose Authenticate. Claude then opens the browser.`,
+            fileName: `${serverName}-claude-command.txt`,
           },
           {
             id: "prompt",
@@ -101,9 +112,9 @@ ${basePrompt}
 Run:
 ${claudeCommand}
 
-Claude Code requires its interactive MCP screen for OAuth. After adding the server, tell me to enter "/mcp", select "webdeploy", and choose "Authenticate". Do not claim authentication is complete until the tools have been called successfully.`,
+Claude Code requires its interactive MCP screen for OAuth. After adding the server, tell me to enter "/mcp", select "${serverName}", and choose "Authenticate". Do not claim authentication is complete until the tools have been called successfully.`,
             nextStep: "Enter /mcp when Claude asks, then complete authentication in the browser.",
-            fileName: "webdeploy-mcp-claude-prompt.txt",
+            fileName: `${serverName}-claude-prompt.txt`,
           },
           {
             id: "manual",
@@ -111,14 +122,14 @@ Claude Code requires its interactive MCP screen for OAuth. After adding the serv
             description: "Add this server to the Claude Code user configuration.",
             content: `{
   "mcpServers": {
-    "webdeploy": {
+    "${serverName}": {
       "type": "http",
       "url": "${mcpUrl}"
     }
   }
 }`,
-            nextStep: "Restart Claude Code, enter /mcp, select webdeploy, and choose Authenticate.",
-            fileName: "webdeploy-mcp-claude-manual.txt",
+            nextStep: `Restart Claude Code, enter /mcp, select ${serverName}, and choose Authenticate.`,
+            fileName: `${serverName}-claude-manual.txt`,
           },
         ],
       },
@@ -137,20 +148,20 @@ ${basePrompt}
 
 Detect this client's native MCP configuration and authentication commands. Do not use a stdio bridge. If authentication requires an interactive client screen that you cannot open, give me the single exact action required and continue verification afterward.`,
             nextStep: "Complete the browser prompt when it opens.",
-            fileName: "webdeploy-mcp-agent-prompt.txt",
+            fileName: `${serverName}-agent-prompt.txt`,
           },
           {
             id: "manual",
             label: "Connection details",
             description: "Use these values in the Agent's MCP settings.",
-            content: `Name: webdeploy
+            content: `Name: ${serverName}
 Transport: Streamable HTTP
 URL: ${mcpUrl}
 Authentication: OAuth Authorization Code + PKCE
 Token entry: Not required`,
             nextStep:
               "Start the client's OAuth action, complete Passkey login, and verify platform_status.",
-            fileName: "webdeploy-mcp-connection.txt",
+            fileName: `${serverName}-connection.txt`,
           },
         ],
       },
@@ -201,6 +212,7 @@ Next: ${method.nextStep}`,
     .join("\n\n");
   return `# WebDeploy MCP installation
 
+MCP name: ${catalog.serverName}
 MCP endpoint: ${catalog.mcpUrl}
 
 ${body}

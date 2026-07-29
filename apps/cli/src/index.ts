@@ -23,7 +23,7 @@ const database = createDatabase(config.DATABASE_URL);
 const program = new Command()
   .name("webdeploy")
   .description("Administer a local WebDeploy MCP installation")
-  .version("0.1.2");
+  .version("0.1.3");
 
 program
   .command("status")
@@ -141,7 +141,10 @@ Examples:
     if (options.agent) selection.agent = options.agent as McpAgentId;
     if (options.method) selection.method = options.method as McpInstallMethodId;
     if (options.raw) selection.raw = true;
-    const guide = renderMcpInstallGuide(createMcpInstallCatalog(config.MCP_PUBLIC_URL), selection);
+    const guide = renderMcpInstallGuide(
+      createMcpInstallCatalog(config.MCP_PUBLIC_URL, config.MCP_SERVER_NAME),
+      selection,
+    );
     process.stdout.write(guide);
     if (options.output) {
       const destination = resolve(options.output);

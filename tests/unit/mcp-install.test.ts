@@ -8,6 +8,7 @@ describe("MCP installation instructions", () => {
   it("builds copy-ready choices for Codex, Claude, and generic Agents", () => {
     const catalog = createMcpInstallCatalog("https://mcp.example.com/");
 
+    expect(catalog.serverName).toBe("webdeploy-mcp-example-com");
     expect(catalog.mcpUrl).toBe("https://mcp.example.com/mcp");
     expect(catalog.agents.map((agent) => agent.id)).toEqual(["codex", "claude", "generic"]);
     expect(catalog.agents[0]?.methods.map((method) => method.id)).toEqual([
@@ -16,7 +17,7 @@ describe("MCP installation instructions", () => {
       "manual",
     ]);
     expect(catalog.agents[1]?.methods[0]?.content).toContain(
-      "claude mcp add --transport http --scope user webdeploy",
+      "claude mcp add --transport http --scope user webdeploy-mcp-example-com",
     );
   });
 
@@ -29,11 +30,19 @@ describe("MCP installation instructions", () => {
     });
     const guide = renderMcpInstallGuide(catalog);
 
-    expect(raw).toContain("codex mcp login webdeploy");
+    expect(raw).toContain("codex mcp login webdeploy-mcp-example-com");
     expect(guide).toContain("## Codex");
     expect(guide).toContain("## Claude Code");
     expect(guide).toContain("## Other Agent");
     expect(guide).toContain("webdeploy mcp --help");
+  });
+
+  it("uses an explicitly configured unique name", () => {
+    const catalog = createMcpInstallCatalog("https://mcp.example.com", "webdeploy-production-east");
+    expect(catalog.serverName).toBe("webdeploy-production-east");
+    expect(catalog.agents[0]?.methods[0]?.content).toContain(
+      "codex mcp add webdeploy-production-east",
+    );
   });
 
   it("rejects unavailable Agent and method combinations", () => {
