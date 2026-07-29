@@ -26,7 +26,7 @@ tar -xzf "$tmp/$asset" -C "$target" --strip-components=1
 backup="$DATA_DIR/backups/pre-update-$(date -u +%Y%m%dT%H%M%SZ).dump"
 mkdir -p "$(dirname "$backup")"
 pg_dump --format=custom --file "$backup" "$DATABASE_URL"
-(cd "$target"; node packages/core/dist/migrate.js)
+(cd "$target"; node packages/core/dist/migrate-cli.js)
 previous="$(readlink -f "$INSTALL_ROOT/current")"
 ln -sfn "$target" "$INSTALL_ROOT/current"
 if ! webdeploy restart; then

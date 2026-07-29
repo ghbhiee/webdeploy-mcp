@@ -1,6 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createDatabase } from "./db.js";
 
 export async function migrate(
@@ -30,12 +29,4 @@ export async function migrate(
   } finally {
     await database.end();
   }
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL is required");
-  const migrationsDirectory = resolve(process.cwd(), "migrations");
-  await migrate(connectionString, migrationsDirectory);
-  console.log("Database migrations completed.");
 }

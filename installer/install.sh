@@ -231,7 +231,7 @@ set -a
 # shellcheck disable=SC1091
 source "$CONFIG_DIR/webdeploy.env"
 set +a
-(cd "$RELEASE_DIR"; node packages/core/dist/migrate.js)
+(cd "$RELEASE_DIR"; node packages/core/dist/migrate-cli.js)
 BOOTSTRAP_ADMIN_IDENTITY="$ADMIN_IDENTITY" node "$RELEASE_DIR/installer/bootstrap.mjs"
 
 install -m 0755 "$RELEASE_DIR/installer/bin/webdeploy-control" /usr/local/libexec/webdeploy-control
