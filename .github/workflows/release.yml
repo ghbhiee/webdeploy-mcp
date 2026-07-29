@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate semantic tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - name: Build release assets
+        run: |
+          archive="webdeploy-mcp-${GITHUB_REF_NAME}.tar.gz"
+          git archive --format=tar.gz --prefix="webdeploy-mcp-${GITHUB_REF_NAME}/" \
+            --output="$archive" "$GITHUB_REF_NAME"
+          sha256sum "$archive" install.sh >SHA256SUMS
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WebDeploy MCP ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          prerelease: false
+          files: |
+            webdeploy-mcp-${{ github.ref_name }}.tar.gz
+            install.sh
+            SHA256SUMS
