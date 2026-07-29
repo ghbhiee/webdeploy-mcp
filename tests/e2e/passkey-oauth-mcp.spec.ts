@@ -63,7 +63,10 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   await login(page, username);
   await page.getByRole("button", { name: "New project" }).click();
   await page.getByLabel("Project name").fill("Passkey Test Site");
-  await page.getByRole("button", { name: "Create project" }).click();
+  await page
+    .getByLabel("Create a project")
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Passkey Test Site" })).toBeVisible();
   const projectId = page.url().match(/projects\/([0-9a-f-]+)/)?.[1];
   expect(projectId).toBeTruthy();
