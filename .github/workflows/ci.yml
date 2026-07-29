@@ -62,7 +62,12 @@ jobs:
         run: |
           node apps/control-plane/dist/index.js >/tmp/webdeploy-control.log 2>&1 &
           echo $! >/tmp/webdeploy-control.pid
-          for i in {1..30}; do curl -fsS http://127.0.0.1:3847/healthz && break; sleep 1; done
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3847/healthz; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/webdeploy-control.log
+          exit 1
       - run: npx playwright install --with-deps chromium
       - run: pnpm test:e2e
       - if: failure()

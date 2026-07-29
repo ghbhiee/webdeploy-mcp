@@ -66,12 +66,6 @@ export async function createOAuthRuntime(
       registration: {
         enabled: true,
         initialAccessToken: false,
-        policies: {
-          request: (_ctx: any, properties: Record<string, unknown>) => {
-            const uris = properties.redirect_uris;
-            return Array.isArray(uris) && uris.every((value) => typeof value === "string");
-          },
-        },
       },
       registrationManagement: { enabled: false },
       resourceIndicators: {
