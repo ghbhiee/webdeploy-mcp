@@ -3,8 +3,14 @@ set -Eeuo pipefail
 
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 
-if [[ -f "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/installer/install.sh" ]]; then
-  exec bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/installer/install.sh" "$@"
+source_path="${BASH_SOURCE[0]:-}"
+if [[ -n "$source_path" ]]; then
+  source_dir="$(cd -- "$(dirname -- "$source_path")" && pwd)"
+else
+  source_dir=""
+fi
+if [[ -n "$source_dir" && -f "$source_dir/installer/install.sh" ]]; then
+  exec bash "$source_dir/installer/install.sh" "$@"
 fi
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Required command not found: $1" >&2; exit 1; }; }

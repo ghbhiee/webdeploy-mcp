@@ -7,7 +7,7 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.4 supports one-command installation under `/webdeploy` on an existing
+> **Release status:** v0.1.5 supports one-command installation under `/webdeploy` on an existing
 > domain and Nginx virtual host.
 
 ## What it provides
@@ -339,7 +339,7 @@ browser tests, and shell syntax checks on Ubuntu.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.4
+## Known limitations in v0.1.5
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload

@@ -1,4 +1,4 @@
-# WebDeploy MCP v0.1.4
+# WebDeploy MCP v0.1.5
 
 This release supports deploying WebDeploy behind an existing website at `/webdeploy/`.
 
@@ -8,11 +8,11 @@ This release supports deploying WebDeploy behind an existing website at `/webdep
 - Only `/webdeploy/` is added; the root website remains unchanged.
 - Dashboard, Passkeys, OAuth PKCE, MCP streaming, and Agent commands all use the public path.
 - Existing Nginx configuration is backed up, validated, and rolled back safely.
-- The generated MCP name includes both domain and path.
+- Piped bootstrap installation is clean and non-interactive.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.4.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.5.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

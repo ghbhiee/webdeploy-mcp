@@ -2,6 +2,12 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.5] - 2026-07-29
+
+### Fixed
+
+- Piped bootstrap installation no longer references an unset `BASH_SOURCE`
+
 ## [0.1.4] - 2026-07-29
 
 ### Added
