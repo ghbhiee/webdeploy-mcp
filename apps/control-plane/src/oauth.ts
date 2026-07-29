@@ -178,6 +178,10 @@ function registerProtectedResourceMetadata(app: FastifyInstance, config: Config)
 function registerProviderRoutes(app: FastifyInstance, provider: any): void {
   const callback = provider.callback();
   const handler = async (request: FastifyRequest, reply: FastifyReply) => {
+    // Fastify consumes JSON and form bodies before this adapter runs. oidc-provider
+    // accepts an already-parsed body on the raw request when the stream is no
+    // longer readable.
+    (request.raw as any).body = request.body;
     reply.hijack();
     await callback(request.raw, reply.raw);
   };
