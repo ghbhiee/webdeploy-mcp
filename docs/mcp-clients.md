@@ -18,10 +18,10 @@ Download actions.
 ## Codex CLI
 
 ```bash
-codex mcp add webdeploy-deploy-example-com \
-  --url https://deploy.example.com/mcp \
-  --oauth-resource https://deploy.example.com/mcp
-codex mcp login webdeploy-deploy-example-com \
+codex mcp add webdeploy-deploy-example-com-webdeploy \
+  --url https://deploy.example.com/webdeploy/mcp \
+  --oauth-resource https://deploy.example.com/webdeploy/mcp
+codex mcp login webdeploy-deploy-example-com-webdeploy \
   --scopes openid,profile,platform:read,projects:write,deployments:write,offline_access
 ```
 
@@ -33,7 +33,7 @@ Inspect or remove the connection with:
 
 ```bash
 codex mcp list
-codex mcp remove webdeploy-deploy-example-com
+codex mcp remove webdeploy-deploy-example-com-webdeploy
 ```
 
 ## Claude Code
@@ -41,13 +41,13 @@ codex mcp remove webdeploy-deploy-example-com
 Add WebDeploy as a user-scoped remote HTTP server:
 
 ```bash
-claude mcp add --transport http --scope user webdeploy-deploy-example-com https://deploy.example.com/mcp
+claude mcp add --transport http --scope user webdeploy-deploy-example-com-webdeploy https://deploy.example.com/webdeploy/mcp
 ```
 
 Claude Code performs interactive OAuth from its MCP menu:
 
 1. Start Claude Code and enter `/mcp`.
-2. Select `webdeploy-deploy-example-com`.
+2. Select `webdeploy-deploy-example-com-webdeploy`.
 3. Choose **Authenticate**. The system browser opens automatically.
 4. Complete WebDeploy Passkey login and approve access.
 5. Return to Claude Code and use `/mcp` to confirm the server is connected.
@@ -55,8 +55,8 @@ Claude Code performs interactive OAuth from its MCP menu:
 Inspect or remove the connection with:
 
 ```bash
-claude mcp get webdeploy-deploy-example-com
-claude mcp remove --scope user webdeploy-deploy-example-com
+claude mcp get webdeploy-deploy-example-com-webdeploy
+claude mcp remove --scope user webdeploy-deploy-example-com-webdeploy
 ```
 
 Adding the server only writes its URL. The browser opens when **Authenticate** is selected from
@@ -70,7 +70,7 @@ replace `<MCP_URL>` and paste the whole block into the Agent:
 ```text
 Install the WebDeploy MCP server in this agent.
 
-Server name: webdeploy-deploy-example-com
+Server name: webdeploy-deploy-example-com-webdeploy
 MCP URL: <MCP_URL>
 
 Requirements:

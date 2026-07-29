@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="${WEBDEPLOY_VERSION:-v0.1.3}"
+RELEASE_VERSION="${WEBDEPLOY_VERSION:-v0.1.4}"
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 INSTALL_ROOT="/opt/webdeploy"
 DATA_DIR="/var/lib/webdeploy"
@@ -9,6 +9,7 @@ CONFIG_DIR="/etc/webdeploy"
 DASHBOARD_DOMAIN=""
 MCP_DOMAIN=""
 MCP_SERVER_NAME=""
+PUBLIC_PATH="/webdeploy"
 INTERNAL_PORT="3847"
 ADMIN_IDENTITY=""
 ACME_EMAIL=""
@@ -26,10 +27,12 @@ Usage: sudo bash installer/install.sh [options]
 
 Quick install:
   DOMAIN                       Use one domain, existing Nginx when present,
-                               HTTPS, admin identity "admin", and auto-update
+                               path /webdeploy, HTTPS, admin identity "admin",
+                               and auto-update
 
 Advanced options:
   --domain HOSTNAME             Dashboard and MCP domain
+  --path PATH                   URL path (default: /webdeploy; use / for root)
   --mcp-name NAME               MCP client name (default: derived from domain)
   --install-dir PATH
   --data-dir PATH
@@ -57,6 +60,7 @@ fi
 while (($#)); do
   case "$1" in
     --domain) DASHBOARD_DOMAIN="$2"; MCP_DOMAIN="$2"; shift 2 ;;
+    --path) PUBLIC_PATH="$2"; shift 2 ;;
     --mcp-name) MCP_SERVER_NAME="$2"; shift 2 ;;
     --install-dir) INSTALL_ROOT="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
@@ -139,6 +143,7 @@ prompt INSTALL_ROOT "Installation directory" "$INSTALL_ROOT"
 prompt DATA_DIR "Data directory" "$DATA_DIR"
 prompt_required DASHBOARD_DOMAIN "Public Dashboard domain"
 prompt MCP_DOMAIN "MCP domain" "${MCP_DOMAIN:-$DASHBOARD_DOMAIN}"
+prompt PUBLIC_PATH "Public URL path" "$PUBLIC_PATH"
 prompt INTERNAL_PORT "Internal control-plane port" "$INTERNAL_PORT"
 prompt ADMIN_IDENTITY "Initial administrator username or email" "${ADMIN_IDENTITY:-admin}"
 yesno CONFIGURE_NGINX "Configure Nginx" "$CONFIGURE_NGINX"
@@ -149,9 +154,18 @@ yesno AUTO_UPDATE "Enable weekly automatic updates" "$AUTO_UPDATE"
 valid_hostname='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$'
 [[ "$DASHBOARD_DOMAIN" =~ $valid_hostname && "$MCP_DOMAIN" =~ $valid_hostname ]] ||
   { echo "Dashboard and MCP domains must be valid fully-qualified hostnames." >&2; exit 1; }
+[[ "$PUBLIC_PATH" =~ ^/[A-Za-z0-9._~/-]*$ && "$PUBLIC_PATH" != *".."* ]] ||
+  { echo "Public path must be an absolute URL path such as /webdeploy." >&2; exit 1; }
+PUBLIC_PATH="/${PUBLIC_PATH#/}"
+PUBLIC_PATH="${PUBLIC_PATH%/}"
+[[ -n "$PUBLIC_PATH" ]] || PUBLIC_PATH="/"
+BASE_PATH="$PUBLIC_PATH"
+[[ "$BASE_PATH" == "/" ]] && BASE_PATH=""
+PUBLIC_URL="https://$DASHBOARD_DOMAIN$BASE_PATH"
+MCP_PUBLIC_URL="https://$MCP_DOMAIN$BASE_PATH"
 
 if [[ -z "$MCP_SERVER_NAME" ]]; then
-  mcp_slug="webdeploy-${MCP_DOMAIN,,}"
+  mcp_slug="webdeploy-${MCP_DOMAIN,,}${BASE_PATH,,}"
   mcp_slug="${mcp_slug//[^a-z0-9_-]/-}"
   if ((${#mcp_slug} > 64)); then
     mcp_hash="$(printf '%s' "$MCP_DOMAIN" | sha256sum | cut -c1-8)"
@@ -175,18 +189,25 @@ if ss -ltnH "sport = :$INTERNAL_PORT" | grep -q .; then
   echo "Port $INTERNAL_PORT is already in use. Choose another internal port." >&2
   exit 1
 fi
-if [[ "$CONFIGURE_NGINX" == yes ]] && command -v nginx >/dev/null; then
-  for domain in "$DASHBOARD_DOMAIN" "$MCP_DOMAIN"; do
-    if grep -RqsE "server_name[[:space:]][^;]*\\b${domain//./\\.}\\b" /etc/nginx 2>/dev/null; then
-      echo "Existing Nginx configuration already declares server_name $domain." >&2
-      echo "Resolve the conflict or rerun with --no-nginx." >&2
-      exit 1
-    fi
-  done
+EXISTING_VHOST="no"
+if [[ "$CONFIGURE_NGINX" == yes ]] && command -v nginx >/dev/null &&
+  grep -RqsE "server_name[[:space:]][^;]*\\b${DASHBOARD_DOMAIN//./\\.}\\b" \
+    /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null; then
+  EXISTING_VHOST="yes"
+  [[ -n "$BASE_PATH" ]] || {
+    echo "The domain already has an Nginx site. Use --path /webdeploy to preserve it." >&2
+    exit 1
+  }
+  [[ "$MCP_DOMAIN" == "$DASHBOARD_DOMAIN" ]] || {
+    echo "Path deployment currently requires the Dashboard and MCP to use the same domain." >&2
+    exit 1
+  }
 fi
 
 if [[ "$CONFIGURE_NGINX" == no ]]; then
   nginx_plan="disabled"
+elif [[ "$EXISTING_VHOST" == yes ]]; then
+  nginx_plan="reuse existing virtual host and add $BASE_PATH"
 elif command -v nginx >/dev/null 2>&1; then
   nginx_plan="reuse existing $(nginx -v 2>&1)"
 else
@@ -194,9 +215,9 @@ else
 fi
 cat <<PLAN
 Installation plan
-  Dashboard: https://$DASHBOARD_DOMAIN/
+  Dashboard: $PUBLIC_URL/
   MCP name: $MCP_SERVER_NAME
-  MCP URL: https://$MCP_DOMAIN/mcp
+  MCP URL: $MCP_PUBLIC_URL/mcp
   Nginx: $nginx_plan
   HTTPS: $CONFIGURE_HTTPS
   Auto-update: $AUTO_UPDATE
@@ -204,12 +225,33 @@ PLAN
 [[ "$PLAN_ONLY" == yes ]] && exit 0
 
 SOURCE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_DIR="$INSTALL_ROOT/releases/$VERSION"
+RELEASE_DIR="$INSTALL_ROOT/releases/$RELEASE_VERSION"
 created_release=no
+nginx_vhost_modified=""
+nginx_file_created=""
+services_started="no"
 rollback() {
   local code=$?
   if ((code != 0)); then
-    echo "Installation failed; rolling back files created for $VERSION." >&2
+    echo "Installation failed; rolling back files created for $RELEASE_VERSION." >&2
+    if [[ -n "$nginx_vhost_modified" ]]; then
+      python3 "$RELEASE_DIR/installer/configure-nginx-path.py" \
+        --remove-from "$nginx_vhost_modified" \
+        --include /etc/nginx/snippets/webdeploy-control.conf || true
+    fi
+    [[ -z "$nginx_file_created" ]] || rm -f -- "$nginx_file_created"
+    rm -f /etc/nginx/snippets/webdeploy-control.conf
+    if command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then
+      systemctl reload nginx || true
+    fi
+    if [[ "$services_started" == yes ]]; then
+      systemctl disable --now webdeploy-worker webdeploy-pm2 2>/dev/null || true
+      PM2_HOME="$DATA_DIR/pm2" pm2 delete webdeploy-control 2>/dev/null || true
+      PM2_HOME="$DATA_DIR/pm2" pm2 save --force 2>/dev/null || true
+      rm -f /etc/systemd/system/webdeploy-worker.service \
+        /etc/systemd/system/webdeploy-pm2.service
+      systemctl daemon-reload
+    fi
     if [[ "$created_release" == yes && -d "$RELEASE_DIR" ]]; then rm -rf -- "$RELEASE_DIR"; fi
   fi
 }
@@ -217,13 +259,14 @@ trap rollback EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-packages=(ca-certificates curl git gnupg jq openssl build-essential unzip postgresql postgresql-client)
+packages=(ca-certificates curl git gnupg jq openssl build-essential unzip python3 postgresql postgresql-client)
 if [[ "$CONFIGURE_NGINX" == yes ]] && ! command -v nginx >/dev/null 2>&1; then
   packages+=(nginx)
 fi
-if [[ "$CONFIGURE_HTTPS" == yes ]] && ! command -v certbot >/dev/null 2>&1; then
+if [[ "$CONFIGURE_HTTPS" == yes && "$EXISTING_VHOST" == no ]] &&
+  ! command -v certbot >/dev/null 2>&1; then
   packages+=(certbot python3-certbot-nginx)
-elif [[ "$CONFIGURE_HTTPS" == yes ]] &&
+elif [[ "$CONFIGURE_HTTPS" == yes && "$EXISTING_VHOST" == no ]] &&
   ! certbot plugins 2>/dev/null | grep -qE '(^|[[:space:]])nginx([[:space:]]|$)'; then
   packages+=(python3-certbot-nginx)
 fi
@@ -249,7 +292,14 @@ if ! command -v mise >/dev/null; then
   mise_tmp="$(mktemp -d)"
   curl -fsSLo "$mise_tmp/mise" "https://github.com/jdx/mise/releases/download/${MISE_VERSION}/${mise_asset}"
   curl -fsSLo "$mise_tmp/SHA256SUMS" "https://github.com/jdx/mise/releases/download/${MISE_VERSION}/SHASUMS256.txt"
-  (cd "$mise_tmp"; grep "  ${mise_asset}$" SHA256SUMS | sed "s/${mise_asset}$/mise/" | sha256sum -c -)
+  mise_checksum="$(
+    grep -E "  (\\./)?${mise_asset}$" "$mise_tmp/SHA256SUMS" | awk '{print $1}'
+  )"
+  [[ "$mise_checksum" =~ ^[a-f0-9]{64}$ ]] || {
+    echo "Unable to find the mise checksum for $mise_asset." >&2
+    exit 1
+  }
+  (cd "$mise_tmp"; printf '%s  mise\n' "$mise_checksum" | sha256sum -c -)
   install -m 0755 "$mise_tmp/mise" /usr/local/bin/mise
   rm -rf -- "$mise_tmp"
 fi
@@ -264,7 +314,7 @@ rm -rf -- "$RELEASE_DIR/node_modules" "$RELEASE_DIR"/apps/*/node_modules "$RELEA
 (
   cd "$RELEASE_DIR"
   pnpm install --frozen-lockfile
-  pnpm build
+  WEBDEPLOY_BASE_PATH="$BASE_PATH" pnpm build
 )
 ln -sfn "$RELEASE_DIR" "$INSTALL_ROOT/current"
 
@@ -299,9 +349,10 @@ cat >"$CONFIG_DIR/webdeploy.env" <<ENV
 NODE_ENV=production
 HOST=127.0.0.1
 PORT=$INTERNAL_PORT
-PUBLIC_URL=https://$DASHBOARD_DOMAIN
-MCP_PUBLIC_URL=https://$MCP_DOMAIN
+PUBLIC_URL=$PUBLIC_URL
+MCP_PUBLIC_URL=$MCP_PUBLIC_URL
 MCP_SERVER_NAME=$MCP_SERVER_NAME
+WEBDEPLOY_BASE_PATH=$BASE_PATH
 DATABASE_URL=$database_url
 DATA_DIR=$DATA_DIR
 CONFIG_DIR=$CONFIG_DIR
@@ -323,6 +374,7 @@ PM2_HOME=$DATA_DIR/pm2
 RUNTIME_MANAGER=mise
 WEBDEPLOY_INSTALL_ROOT=$INSTALL_ROOT
 WEBDEPLOY_REPOSITORY=$REPOSITORY
+NGINX_SNIPPET_FILE=/etc/nginx/snippets/webdeploy-control.conf
 ENV
 chmod 0600 "$CONFIG_DIR/webdeploy.env"
 
@@ -333,6 +385,7 @@ set +a
 (cd "$RELEASE_DIR"; node packages/core/dist/migrate-cli.js)
 BOOTSTRAP_ADMIN_IDENTITY="$ADMIN_IDENTITY" node "$RELEASE_DIR/installer/bootstrap.mjs"
 
+install -d -m 0755 /usr/local/libexec
 install -m 0755 "$RELEASE_DIR/installer/bin/webdeploy-control" /usr/local/libexec/webdeploy-control
 sed -i "s#/etc/webdeploy/webdeploy.env#$CONFIG_DIR/webdeploy.env#g; s#/opt/webdeploy#$INSTALL_ROOT#g" \
   /usr/local/libexec/webdeploy-control
@@ -357,8 +410,12 @@ module.exports = {
 PM2
 chmod 0600 "$CONFIG_DIR/ecosystem.config.cjs"
 PM2_HOME="$DATA_DIR/pm2" pm2 start "$CONFIG_DIR/ecosystem.config.cjs"
+services_started=yes
 PM2_HOME="$DATA_DIR/pm2" pm2 save
-env PATH="$PATH:/usr/local/bin" PM2_HOME="$DATA_DIR/pm2" pm2 startup systemd -u root --hp /root
+sed "s#__DATA_DIR__#$DATA_DIR#g" "$RELEASE_DIR/installer/webdeploy-pm2.service" \
+  >/etc/systemd/system/webdeploy-pm2.service
+systemctl daemon-reload
+systemctl enable webdeploy-pm2
 
 worker_unit=/etc/systemd/system/webdeploy-worker.service
 sed -e "s#/etc/webdeploy#$CONFIG_DIR#g" -e "s#/opt/webdeploy#$INSTALL_ROOT#g" \
@@ -369,37 +426,73 @@ systemctl enable --now webdeploy-worker
 if [[ "$CONFIGURE_NGINX" == yes ]]; then
   names="$DASHBOARD_DOMAIN"
   [[ "$MCP_DOMAIN" == "$DASHBOARD_DOMAIN" ]] || names="$names $MCP_DOMAIN"
-  nginx_file="/etc/nginx/conf.d/webdeploy-control.conf"
-  cat >"$nginx_file" <<NGINX
+  install -d -m 0755 /etc/nginx/snippets
+  nginx_snippet="/etc/nginx/snippets/webdeploy-control.conf"
+  if [[ -n "$BASE_PATH" ]]; then
+    cat >"$nginx_snippet" <<NGINX
+# Managed by WebDeploy MCP installer.
+location = $BASE_PATH {
+    return 308 $BASE_PATH/;
+}
+location ^~ $BASE_PATH/ {
+    client_max_body_size 100m;
+    proxy_pass http://127.0.0.1:$INTERNAL_PORT/;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Forwarded-Host \$host;
+    proxy_set_header X-Forwarded-Prefix $BASE_PATH;
+}
+NGINX
+  else
+    cat >"$nginx_snippet" <<NGINX
+# Managed by WebDeploy MCP installer.
+location / {
+    client_max_body_size 100m;
+    proxy_pass http://127.0.0.1:$INTERNAL_PORT;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Forwarded-Host \$host;
+}
+NGINX
+  fi
+
+  if [[ "$EXISTING_VHOST" == yes ]]; then
+    nginx_vhost="$(
+      python3 "$RELEASE_DIR/installer/configure-nginx-path.py" \
+        --domain "$DASHBOARD_DOMAIN" \
+        --path "$BASE_PATH" \
+        --include "$nginx_snippet"
+    )"
+    nginx_vhost_modified="$nginx_vhost"
+    printf '\nNGINX_VHOST_FILE=%s\n' "$nginx_vhost" >>"$CONFIG_DIR/webdeploy.env"
+  else
+    nginx_file="/etc/nginx/conf.d/webdeploy-control.conf"
+    nginx_file_created="$nginx_file"
+    cat >"$nginx_file" <<NGINX
 # Managed by WebDeploy MCP installer.
 server {
     listen 80;
     listen [::]:80;
     server_name $names;
-    client_max_body_size 100m;
-    location /mcp {
-        proxy_pass http://127.0.0.1:$INTERNAL_PORT;
-        proxy_http_version 1.1;
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 3600s;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-    location / {
-        proxy_pass http://127.0.0.1:$INTERNAL_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+    include $nginx_snippet;
 }
 NGINX
+  fi
   nginx -t
   systemctl reload nginx
-  if [[ "$CONFIGURE_HTTPS" == yes ]]; then
+  if [[ "$CONFIGURE_HTTPS" == yes && "$EXISTING_VHOST" == no ]]; then
     cert_args=(-d "$DASHBOARD_DOMAIN")
     [[ "$MCP_DOMAIN" == "$DASHBOARD_DOMAIN" ]] || cert_args+=(-d "$MCP_DOMAIN")
     certbot --nginx --non-interactive --agree-tos --redirect -m "$ACME_EMAIL" "${cert_args[@]}" ||
@@ -421,10 +514,10 @@ WEBDEPLOY_ENV_FILE="$CONFIG_DIR/webdeploy.env" webdeploy mcp \
 chmod 0644 "$CONFIG_DIR/mcp-install.txt"
 cat <<RESULT
 
-WebDeploy MCP $VERSION installed successfully.
+WebDeploy MCP $RELEASE_VERSION installed successfully.
 
-Dashboard: https://$DASHBOARD_DOMAIN/
-MCP endpoint: https://$MCP_DOMAIN/mcp
+Dashboard: $PUBLIC_URL/
+MCP endpoint: $MCP_PUBLIC_URL/mcp
 MCP name: $MCP_SERVER_NAME
 
 1. Open the Dashboard and register a Passkey for: $ADMIN_IDENTITY

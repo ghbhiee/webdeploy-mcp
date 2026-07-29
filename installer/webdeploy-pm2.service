@@ -1,0 +1,16 @@
+[Unit]
+Description=WebDeploy PM2 process manager
+After=network.target
+
+[Service]
+Type=forking
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PM2_HOME=__DATA_DIR__/pm2
+PIDFile=__DATA_DIR__/pm2/pm2.pid
+ExecStart=/usr/local/bin/pm2 resurrect
+ExecReload=/usr/local/bin/pm2 reload all
+ExecStop=/usr/local/bin/pm2 kill
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

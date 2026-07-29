@@ -1,3 +1,5 @@
+import { toPublicPath } from "./base-path";
+
 export interface Session {
   authenticated: boolean;
   user?: { id: string; username: string; isAdmin: boolean; status: string };
@@ -42,7 +44,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrfToken) {
     headers.set("x-csrf-token", csrfToken);
   }
-  const response = await fetch(path, { ...init, headers, credentials: "same-origin" });
+  const response = await fetch(toPublicPath(path), {
+    ...init,
+    headers,
+    credentials: "same-origin",
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.error?.message ?? `Request failed with HTTP ${response.status}`);

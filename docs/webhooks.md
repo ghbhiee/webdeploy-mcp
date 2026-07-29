@@ -28,5 +28,5 @@ const signature = createHmac("sha256", process.env.WEBDEPLOY_WEBHOOK_SECRET)
 Send `body` unchanged. Omit `ref` to deploy the project's configured Git ref. Failed signatures,
 disabled users, missing Git configuration, and projects without auto deploy are rejected.
 
-Provider-specific payload normalization is intentionally not part of v0.1.3. A small CI job or
+Provider-specific payload normalization is intentionally not part of v0.1.4. A small CI job or
 webhook relay can translate a provider event into the compact payload above.

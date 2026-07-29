@@ -22,7 +22,7 @@ curl -fsSLo "$tmp/SHA256SUMS" "$base/SHA256SUMS"
 (cd "$tmp"; grep "  $asset$" SHA256SUMS | sha256sum -c -)
 mkdir "$target"
 tar -xzf "$tmp/$asset" -C "$target" --strip-components=1
-(cd "$target"; pnpm install --frozen-lockfile; pnpm build)
+(cd "$target"; pnpm install --frozen-lockfile; WEBDEPLOY_BASE_PATH="${WEBDEPLOY_BASE_PATH:-}" pnpm build)
 backup="$DATA_DIR/backups/pre-update-$(date -u +%Y%m%dT%H%M%SZ).dump"
 mkdir -p "$(dirname "$backup")"
 pg_dump --format=custom --file "$backup" "$DATABASE_URL"

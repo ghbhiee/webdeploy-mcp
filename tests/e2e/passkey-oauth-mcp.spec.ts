@@ -10,6 +10,14 @@ import {
   type BrowserContext,
   type Page,
 } from "@playwright/test";
+import { deriveMcpServerName } from "../../packages/core/src/mcp-install";
+
+const externalBaseUrl = (process.env.TEST_BASE_URL ?? "http://localhost:3847").replace(/\/+$/, "");
+const externalBasePath = new URL(externalBaseUrl).pathname.replace(/\/+$/, "");
+
+function publicPath(path: string): string {
+  return `${externalBasePath}${path.startsWith("/") ? path : `/${path}`}` || "/";
+}
 
 async function addVirtualPasskey(context: BrowserContext) {
   const page = await context.newPage();
@@ -58,7 +66,7 @@ async function mcpTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<any> {
-  const response = await request.post("/mcp", {
+  const response = await request.post(publicPath("/mcp"), {
     headers: {
       accept: "application/json, text/event-stream",
       authorization: `Bearer ${accessToken}`,
@@ -122,8 +130,8 @@ async function patchProjectSettings(
 ): Promise<void> {
   const response = await page.evaluate(
     async ({ id, body }) => {
-      const session = await fetch("/api/auth/session").then((result) => result.json());
-      const result = await fetch(`/api/projects/${id}`, {
+      const session = await fetch(`${basePath}/api/auth/session`).then((result) => result.json());
+      const result = await fetch(`${basePath}/api/projects/${id}`, {
         method: "PATCH",
         credentials: "same-origin",
         headers: {
@@ -134,7 +142,7 @@ async function patchProjectSettings(
       });
       return { status: result.status, text: await result.text() };
     },
-    { id: projectId, body: settings },
+    { id: projectId, body: settings, basePath: externalBasePath },
   );
   expect(response.status, response.text).toBe(200);
 }
@@ -186,7 +194,7 @@ async function runServerDeploymentScenarios(input: {
       type: "node",
     });
     dynamicProjectId = created.project.id;
-    await page.goto(`/projects/${dynamicProjectId}/setup`);
+    await page.goto(publicPath(`/projects/${dynamicProjectId}/setup`));
     await patchProjectSettings(page, dynamicProjectId, {
       startCommand: "node server.js",
       healthCheckPath: "/health",
@@ -296,7 +304,7 @@ http.createServer((request, response) => {
 }
 
 async function register(page: Page, username: string): Promise<string> {
-  await page.goto("/register");
+  await page.goto(publicPath("/register"));
   await page.getByLabel("Username").fill(username);
   await page.getByRole("button", { name: "Register Passkey" }).click();
   await expect(page.getByText("Passkey registered")).toBeVisible();
@@ -307,7 +315,7 @@ async function register(page: Page, username: string): Promise<string> {
 }
 
 async function login(page: Page, username: string) {
-  await page.goto("/login");
+  await page.goto(publicPath("/login"));
   await page.getByLabel("Username or email").fill(username);
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
@@ -427,7 +435,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const page = await addVirtualPasskey(context);
   const requestCode = await register(page, username);
 
-  const pendingLogin = await request.post("/api/auth/login/options", {
+  const pendingLogin = await request.post(publicPath("/api/auth/login/options"), {
     data: { identifier: username },
   });
   expect(pendingLogin.status()).toBe(401);
@@ -438,8 +446,8 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
 
   await login(page, username);
   await expect(page.getByRole("heading", { name: "Install WebDeploy MCP" })).toBeVisible();
-  const mcpUrl = `${process.env.TEST_BASE_URL}/mcp`;
-  const mcpName = `webdeploy-${new URL(process.env.TEST_BASE_URL!).hostname.replaceAll(".", "-")}`;
+  const mcpUrl = `${externalBaseUrl}/mcp`;
+  const mcpName = deriveMcpServerName(externalBaseUrl);
   await expect(
     page.getByText(`codex mcp add ${mcpName} --url ${mcpUrl}`, { exact: false }),
   ).toBeVisible();
@@ -459,7 +467,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: `Download ${mcpName}-claude-prompt.txt` }).click();
   expect((await downloadPromise).suggestedFilename()).toBe(`${mcpName}-claude-prompt.txt`);
-  const publicSession = await request.get("/api/auth/session");
+  const publicSession = await request.get(publicPath("/api/auth/session"));
   const publicSessionBody = await publicSession.json();
   expect(publicSessionBody.mcpUrl).toBe(mcpUrl);
   expect(publicSessionBody.mcpInstall.serverName).toBe(mcpName);
@@ -475,9 +483,11 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const projectId = page.url().match(/projects\/([0-9a-f-]+)/)?.[1];
   expect(projectId).toBeTruthy();
   await page.evaluate(
-    async ({ id }) => {
-      const session = await fetch("/api/auth/session").then((response) => response.json());
-      await fetch(`/api/projects/${id}/environment/E2E_SECRET`, {
+    async ({ id, basePath }) => {
+      const session = await fetch(`${basePath}/api/auth/session`).then((response) =>
+        response.json(),
+      );
+      await fetch(`${basePath}/api/projects/${id}/environment/E2E_SECRET`, {
         method: "PUT",
         credentials: "same-origin",
         headers: {
@@ -487,11 +497,11 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
         body: JSON.stringify({ kind: "secret", value: "must-never-leak-71f05e" }),
       });
     },
-    { id: projectId! },
+    { id: projectId!, basePath: externalBasePath },
   );
 
   const callbackServer = await startCallbackServer();
-  const clientRegistration = await request.post("/oauth/register", {
+  const clientRegistration = await request.post(publicPath("/oauth/register"), {
     data: {
       client_name: "WebDeploy E2E",
       application_type: "native",
@@ -507,25 +517,27 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const verifier = randomBytes(48).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const state = randomBytes(18).toString("base64url");
-  const authorize = new URL("/oauth/authorize", process.env.TEST_BASE_URL);
+  const authorize = new URL(publicPath("/oauth/authorize"), new URL(externalBaseUrl).origin);
   authorize.search = new URLSearchParams({
     response_type: "code",
     client_id: client.client_id,
     redirect_uri: callbackServer.redirectUri,
     scope: "openid profile platform:read projects:write deployments:write offline_access",
-    resource: `${process.env.TEST_BASE_URL}/mcp`,
+    resource: `${externalBaseUrl}/mcp`,
     code_challenge: challenge,
     code_challenge_method: "S256",
     state,
   }).toString();
   await page.goto(authorize.toString());
-  await page.getByRole("button", { name: "Approve" }).click();
+  const approve = page.getByRole("button", { name: "Approve" });
+  await expect(approve).toBeVisible({ timeout: 15_000 });
+  await approve.click();
   const callback = await callbackServer.callback;
   await callbackServer.close();
   expect(callback.searchParams.get("state")).toBe(state);
   const code = callback.searchParams.get("code");
   expect(code).toBeTruthy();
-  const tokenResponse = await request.post("/oauth/token", {
+  const tokenResponse = await request.post(publicPath("/oauth/token"), {
     form: {
       grant_type: "authorization_code",
       code: code!,
@@ -538,7 +550,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   const tokens = await tokenResponse.json();
   expect(tokens.access_token).toBeTruthy();
 
-  const initialize = await request.post("/mcp", {
+  const initialize = await request.post(publicPath("/mcp"), {
     headers: {
       accept: "application/json, text/event-stream",
       authorization: `Bearer ${tokens.access_token}`,
@@ -555,7 +567,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
     },
   });
   expect(initialize.ok()).toBeTruthy();
-  const tools = await request.post("/mcp", {
+  const tools = await request.post(publicPath("/mcp"), {
     headers: {
       accept: "application/json, text/event-stream",
       authorization: `Bearer ${tokens.access_token}`,
@@ -566,7 +578,7 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   expect(toolBody.result.tools.map((tool: any) => tool.name)).toEqual(
     expect.arrayContaining(["create_project", "deploy_inline_files", "rollback_release"]),
   );
-  const getProject = await request.post("/mcp", {
+  const getProject = await request.post(publicPath("/mcp"), {
     headers: {
       accept: "application/json, text/event-stream",
       authorization: `Bearer ${tokens.access_token}`,
@@ -636,7 +648,7 @@ test("rejected Passkeys cannot authenticate", async ({ browser, request }) => {
   const page = await addVirtualPasskey(context);
   const requestCode = await register(page, username);
   cli("auth", "reject-passkey", requestCode);
-  const response = await request.post("/api/auth/login/options", {
+  const response = await request.post(publicPath("/api/auth/login/options"), {
     data: { identifier: username },
   });
   expect(response.status()).toBe(401);

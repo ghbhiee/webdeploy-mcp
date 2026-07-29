@@ -24,13 +24,19 @@ if [[ "$ASSUME_YES" != yes ]]; then
   read -r -p "Remove WebDeploy services and application files? [y/N]: " answer
   [[ "$answer" =~ ^[Yy]$ ]] || exit 0
 fi
-systemctl disable --now webdeploy-worker webdeploy-update.timer 2>/dev/null || true
+systemctl disable --now webdeploy-worker webdeploy-update.timer webdeploy-pm2 2>/dev/null || true
 PM2_HOME="$DATA_DIR/pm2" pm2 delete webdeploy-control 2>/dev/null || true
 PM2_HOME="$DATA_DIR/pm2" pm2 save --force 2>/dev/null || true
 rm -f /etc/systemd/system/webdeploy-worker.service \
-  /etc/systemd/system/webdeploy-update.service /etc/systemd/system/webdeploy-update.timer
+  /etc/systemd/system/webdeploy-update.service /etc/systemd/system/webdeploy-update.timer \
+  /etc/systemd/system/webdeploy-pm2.service
+if [[ -n "${NGINX_VHOST_FILE:-}" && -f "$INSTALL_ROOT/current/installer/configure-nginx-path.py" ]]; then
+  python3 "$INSTALL_ROOT/current/installer/configure-nginx-path.py" \
+    --remove-from "$NGINX_VHOST_FILE" \
+    --include "${NGINX_SNIPPET_FILE:-/etc/nginx/snippets/webdeploy-control.conf}"
+fi
 rm -f /etc/nginx/conf.d/webdeploy-control.conf /usr/local/bin/webdeploy \
-  /usr/local/libexec/webdeploy-control
+  /usr/local/libexec/webdeploy-control "${NGINX_SNIPPET_FILE:-/etc/nginx/snippets/webdeploy-control.conf}"
 if nginx -t; then
   systemctl reload nginx
 fi

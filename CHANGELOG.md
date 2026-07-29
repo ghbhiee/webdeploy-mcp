@@ -2,6 +2,21 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.4] - 2026-07-29
+
+### Added
+
+- Shared-domain installation under `/webdeploy` with `--path` override
+- Safe Nginx virtual-host include injection, off-path backup, validation, and rollback
+- Dashboard, API, Passkey, OAuth, MCP, and cookie support for public URL prefixes
+- Path-derived MCP names so multiple services on one hostname do not collide
+
+### Fixed
+
+- Reverse-proxy OAuth discovery URLs, secure cookies, and multi-step redirects
+- Debian `VERSION` variable collision, missing `/usr/local/libexec`, and current mise checksums
+- PM2 startup using a different home after reboot
+
 ## [0.1.3] - 2026-07-29
 
 ### Added

@@ -3,7 +3,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Provider } from "oidc-provider";
-import { AppError, writeAudit, type Actor, type Config, type Database } from "@webdeploy/core";
+import {
+  AppError,
+  publicBasePath,
+  publicPath,
+  writeAudit,
+  type Actor,
+  type Config,
+  type Database,
+} from "@webdeploy/core";
 import { createOidcAdapter } from "./oauth-adapter.js";
 import { readSession } from "./session.js";
 
@@ -96,7 +104,8 @@ export async function createOAuthRuntime(
       "deployments:write",
     ],
     interactions: {
-      url: (_ctx: any, interaction: any) => `/oauth/interaction/${interaction.uid}`,
+      url: (_ctx: any, interaction: any) =>
+        publicPath(config.PUBLIC_URL, `/oauth/interaction/${interaction.uid}`),
     },
     findAccount: async (_ctx: any, id: string) => {
       const user = (
@@ -117,6 +126,7 @@ export async function createOAuthRuntime(
       };
     },
   });
+  provider.proxy = config.TRUST_PROXY;
 
   // Codex CLI 0.145.0 drops `iss` while relaying the loopback callback, then
   // rejects the response when discovery advertises RFC 9207 support. Keep
@@ -131,14 +141,17 @@ export async function createOAuthRuntime(
       typeof context.body === "object"
     ) {
       context.body.authorization_response_iss_parameter_supported = false;
+      normalizeDiscoveryUrls(context.body, config.PUBLIC_URL);
     }
   });
 
-  provider.on("server_error", (error: Error) => app.log.error(error, "OAuth provider error"));
+  provider.on("server_error", (_context: unknown, error: Error) =>
+    app.log.error({ err: error }, "OAuth provider error"),
+  );
 
   registerProtectedResourceMetadata(app, config);
   registerInteractionRoutes(app, provider, database, config);
-  registerProviderRoutes(app, provider);
+  registerProviderRoutes(app, provider, config);
 
   return {
     provider,
@@ -179,6 +192,26 @@ export async function createOAuthRuntime(
   };
 }
 
+function normalizeDiscoveryUrls(metadata: Record<string, unknown>, publicUrl: string): void {
+  const external = new URL(publicUrl);
+  const basePath = external.pathname.replace(/\/+$/, "");
+  for (const [key, value] of Object.entries(metadata)) {
+    if (
+      typeof value !== "string" ||
+      !(key.endsWith("_endpoint") || key === "jwks_uri" || key === "registration_client_uri")
+    ) {
+      continue;
+    }
+    const endpoint = new URL(value, external.origin);
+    endpoint.protocol = external.protocol;
+    endpoint.host = external.host;
+    if (basePath && !endpoint.pathname.startsWith(`${basePath}/`)) {
+      endpoint.pathname = `${basePath}${endpoint.pathname}`;
+    }
+    metadata[key] = endpoint.toString();
+  }
+}
+
 function registerProtectedResourceMetadata(app: FastifyInstance, config: Config): void {
   const metadata = {
     resource: `${config.MCP_PUBLIC_URL}/mcp`,
@@ -191,13 +224,14 @@ function registerProtectedResourceMetadata(app: FastifyInstance, config: Config)
   app.get("/.well-known/oauth-protected-resource/mcp", async () => metadata);
 }
 
-function registerProviderRoutes(app: FastifyInstance, provider: any): void {
+function registerProviderRoutes(app: FastifyInstance, provider: any, config: Config): void {
   const callback = provider.callback();
   const handler = async (request: FastifyRequest, reply: FastifyReply) => {
     // Fastify consumes JSON and form bodies before this adapter runs. oidc-provider
     // accepts an already-parsed body on the raw request when the stream is no
     // longer readable.
     (request.raw as any).body = request.body;
+    (request.raw as any).baseUrl = publicBasePath(config.PUBLIC_URL);
     reply.hijack();
     await callback(request.raw, reply.raw);
   };
@@ -214,11 +248,14 @@ function registerInteractionRoutes(
 ): void {
   app.get("/oauth/interaction/:uid", async (request, reply) => {
     const session = await readSession(request, database, config);
+    (request.raw as any).baseUrl = publicBasePath(config.PUBLIC_URL);
     const details = await provider.interactionDetails(request.raw, reply.raw);
     const uid = (request.params as any).uid;
     if (!session) {
-      const returnTo = encodeURIComponent(`/oauth/interaction/${uid}`);
-      return reply.redirect(`/login?returnTo=${returnTo}`);
+      const returnTo = encodeURIComponent(
+        publicPath(config.PUBLIC_URL, `/oauth/interaction/${uid}`),
+      );
+      return reply.redirect(`${publicPath(config.PUBLIC_URL, "/login")}?returnTo=${returnTo}`);
     }
     if (details.prompt.name === "login") {
       await provider.interactionFinished(
@@ -258,7 +295,8 @@ button{padding:12px 18px;border:0;border-radius:9px;font-weight:700;cursor:point
 
   app.post("/oauth/interaction/:uid", async (request, reply) => {
     const session = await readSession(request, database, config);
-    if (!session) return reply.redirect("/login");
+    if (!session) return reply.redirect(publicPath(config.PUBLIC_URL, "/login"));
+    (request.raw as any).baseUrl = publicBasePath(config.PUBLIC_URL);
     const body = request.body as { csrf?: string; decision?: string };
     if (body.csrf !== session.csrfToken)
       throw new AppError("CSRF_FAILED", "Invalid CSRF token", 403);

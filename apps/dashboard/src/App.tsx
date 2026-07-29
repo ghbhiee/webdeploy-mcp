@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { api, setCsrf, type McpInstallCatalog, type McpInstallMethod, type Session } from "./api";
+import { safeReturnPath, toAppPath, toPublicPath } from "./base-path";
 
 type Project = {
   id: string;
@@ -15,17 +16,17 @@ type Project = {
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [path, setPath] = useState(location.pathname);
+  const [path, setPath] = useState(() => toAppPath(location.pathname));
   const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
 
   const navigate = useCallback((next: string) => {
-    history.pushState({}, "", next);
+    history.pushState({}, "", toPublicPath(next));
     setPath(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   useEffect(() => {
-    const onPop = () => setPath(location.pathname);
+    const onPop = () => setPath(toAppPath(location.pathname));
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
   }, []);
@@ -57,7 +58,7 @@ export function App() {
           setSession(value);
           setCsrf(value.csrfToken);
           const returnTo = new URLSearchParams(location.search).get("returnTo");
-          location.assign(returnTo?.startsWith("/") ? returnTo : "/");
+          location.assign(safeReturnPath(returnTo));
         }}
       />
     );

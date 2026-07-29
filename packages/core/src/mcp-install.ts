@@ -26,8 +26,9 @@ export interface McpInstallCatalog {
 const OAUTH_SCOPES = "openid,profile,platform:read,projects:write,deployments:write,offline_access";
 
 export function deriveMcpServerName(publicMcpUrl: string): string {
-  const hostname = new URL(publicMcpUrl).hostname.toLowerCase();
-  const slug = hostname.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const url = new URL(publicMcpUrl);
+  const identity = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`.toLowerCase();
+  const slug = identity.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `webdeploy-${slug}`.slice(0, 64).replace(/-$/, "");
 }
 

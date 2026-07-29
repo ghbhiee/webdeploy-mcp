@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Actor, Config, Database } from "@webdeploy/core";
-import { AppError, hashToken, randomToken } from "@webdeploy/core";
+import { AppError, hashToken, publicBasePath, randomToken } from "@webdeploy/core";
 
 export interface SessionContext {
   id: string;
@@ -93,11 +93,13 @@ export function setSessionCookie(
     httpOnly: true,
     secure: new URL(config.PUBLIC_URL).protocol === "https:",
     sameSite: "lax",
-    path: "/",
+    path: publicBasePath(config.PUBLIC_URL) || "/",
     expires: expiresAt,
   });
 }
 
 export function clearSessionCookie(reply: FastifyReply, config: Config): void {
-  reply.clearCookie(config.SESSION_COOKIE_NAME, { path: "/" });
+  reply.clearCookie(config.SESSION_COOKIE_NAME, {
+    path: publicBasePath(config.PUBLIC_URL) || "/",
+  });
 }

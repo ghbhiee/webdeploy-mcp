@@ -53,6 +53,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return parsed as Config;
 }
 
+export function publicBasePath(publicUrl: string): string {
+  const pathname = new URL(publicUrl).pathname.replace(/\/+$/, "");
+  return pathname === "/" ? "" : pathname;
+}
+
+export function publicPath(publicUrl: string, path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${publicBasePath(publicUrl)}${normalizedPath}`;
+}
+
 export function loadMasterKey(path: string): Buffer {
   const raw = readFileSync(path);
   const key = raw.toString("utf8").trim();

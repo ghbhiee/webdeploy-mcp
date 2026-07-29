@@ -45,6 +45,12 @@ describe("MCP installation instructions", () => {
     );
   });
 
+  it("uses the public path to isolate MCP names on a shared domain", () => {
+    const catalog = createMcpInstallCatalog("https://12.tokencv.com/webdeploy");
+    expect(catalog.serverName).toBe("webdeploy-12-tokencv-com-webdeploy");
+    expect(catalog.mcpUrl).toBe("https://12.tokencv.com/webdeploy/mcp");
+  });
+
   it("rejects unavailable Agent and method combinations", () => {
     const catalog = createMcpInstallCatalog("https://mcp.example.com");
     expect(() => renderMcpInstallGuide(catalog, { agent: "generic", method: "command" })).toThrow(

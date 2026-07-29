@@ -6,7 +6,7 @@ Defaults are shown; the installer can change all three roots.
 
 ```text
 /opt/webdeploy/
-  current -> releases/v0.1.3
+  current -> releases/v0.1.4
   releases/<version>/
 /var/lib/webdeploy/
   projects/<project-id>/releases/<release-id>/
@@ -23,37 +23,36 @@ Defaults are shown; the installer can change all three roots.
 
 ## Manual reverse proxy
 
-When installing with `--no-nginx`, proxy both the Dashboard and MCP hostname to the configured
-loopback port. The MCP route should have response buffering disabled and a long read timeout.
+When installing with `--no-nginx`, strip the public `/webdeploy/` prefix before proxying to the
+configured loopback port. Keep buffering disabled and use a long read timeout for MCP streaming.
 
 ```nginx
 server {
     listen 443 ssl http2;
     server_name deploy.example.com;
-    client_max_body_size 100m;
+    location = /webdeploy {
+        return 308 /webdeploy/;
+    }
 
-    location /mcp {
-        proxy_pass http://127.0.0.1:3847;
+    location ^~ /webdeploy/ {
+        client_max_body_size 100m;
+        proxy_pass http://127.0.0.1:3847/;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 3600s;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:3847;
-        proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Prefix /webdeploy;
     }
 }
 ```
 
-Replace all example values. Set `PUBLIC_URL`, `MCP_PUBLIC_URL`, and `TRUST_PROXY` consistently.
+Set `PUBLIC_URL` and `MCP_PUBLIC_URL` to `https://deploy.example.com/webdeploy`, build the Dashboard
+with `WEBDEPLOY_BASE_PATH=/webdeploy`, and enable `TRUST_PROXY`.
 
 ## Application contract
 
@@ -69,7 +68,7 @@ configured Node.js and/or Python version. Static projects must produce a non-emp
 Create the project once, identify its OS user from PostgreSQL or the project directory, then
 install a read-only repository deploy key in that user's `.ssh` directory. Use strict permissions,
 pin the host key in `known_hosts`, and configure the project with an SSH Git URL. The Dashboard
-does not accept private-key material in v0.1.3.
+does not accept private-key material in v0.1.4.
 
 ## Backup and recovery
 

@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.3 provides one-command domain installation, existing-Nginx reuse, and
-> per-domain MCP names. Test on a non-production server before critical use.
+> **Release status:** v0.1.4 supports one-command installation under `/webdeploy` on an existing
+> domain and Nginx virtual host.
 
 ## What it provides
 
@@ -55,7 +55,7 @@ See [Architecture](docs/architecture.md) and [Security](SECURITY.md).
 - Ubuntu 22.04 or 24.04, or Debian 12
 - x86_64 or arm64
 - Root access for installation
-- A DNS name for the Dashboard and MCP endpoint
+- A DNS name that already points to the server, including a domain used by an existing site
 - TCP 80/443 reachable if the installer should request certificates
 - At least 2 GB RAM and 10 GB free disk for a small installation
 
@@ -64,20 +64,22 @@ The installer provisions Node.js 24, pnpm, PM2, Nginx, Certbot, PostgreSQL, Git,
 
 ## One-command installation
 
-First point a real, unused hostname at the server. Then run one command:
+Run one command with the server's domain:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ghbhiee/webdeploy-mcp/main/install.sh | sudo bash -s -- deploy.your-domain.com
 ```
 
-Replace `deploy.your-domain.com`; it is not a literal example to reuse. Quick installation uses
-that hostname for the Dashboard and MCP, derives a unique MCP name such as
-`webdeploy-deploy-your-domain-com`, enables HTTPS and auto-update, and uses `admin` as the initial
+Quick installation publishes the Dashboard at
+`https://deploy.your-domain.com/webdeploy/` and MCP at
+`https://deploy.your-domain.com/webdeploy/mcp`. It derives an isolated name such as
+`webdeploy-deploy-your-domain-com-webdeploy`, enables auto-update, and uses `admin` as the initial
 identity.
 
-If Nginx already exists, WebDeploy reuses it and adds its own configuration. If Nginx is absent,
-the installer installs it. It never replaces an unrelated virtual host with the same hostname, so
-use a new hostname for WebDeploy.
+If the domain already has an Nginx virtual host, the installer keeps that site and adds only the
+`/webdeploy/` reverse proxy. If Nginx or the virtual host is absent, it installs Nginx and creates
+the required configuration. Use `--path /another-path` to change the path or `--path /` for a
+dedicated root-domain installation.
 
 Download-first installation uses the same short form:
 
@@ -147,16 +149,16 @@ already contains the deployment's exact MCP URL.
 The public endpoint is:
 
 ```text
-https://your-mcp-domain.example/mcp
+https://your-mcp-domain.example/webdeploy/mcp
 ```
 
 ### Codex CLI
 
 ```bash
-codex mcp add webdeploy-your-mcp-domain-example \
-  --url https://your-mcp-domain.example/mcp \
-  --oauth-resource https://your-mcp-domain.example/mcp
-codex mcp login webdeploy-your-mcp-domain-example \
+codex mcp add webdeploy-your-mcp-domain-example-webdeploy \
+  --url https://your-mcp-domain.example/webdeploy/mcp \
+  --oauth-resource https://your-mcp-domain.example/webdeploy/mcp
+codex mcp login webdeploy-your-mcp-domain-example-webdeploy \
   --scopes openid,profile,platform:read,projects:write,deployments:write,offline_access
 ```
 
@@ -166,11 +168,11 @@ requested scopes, and approve access.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http --scope user webdeploy-your-mcp-domain-example \
-  https://your-mcp-domain.example/mcp
+claude mcp add --transport http --scope user webdeploy-your-mcp-domain-example-webdeploy \
+  https://your-mcp-domain.example/webdeploy/mcp
 ```
 
-Then open Claude Code, enter `/mcp`, select `webdeploy-your-mcp-domain-example`, and choose
+Then open Claude Code, enter `/mcp`, select `webdeploy-your-mcp-domain-example-webdeploy`, and choose
 **Authenticate**. Claude opens
 the system browser for WebDeploy Passkey login and consent. Claude stores and refreshes the OAuth
 credentials after approval.
@@ -183,7 +185,7 @@ coding Agent:
 ```text
 Install the WebDeploy MCP server in this agent.
 
-Server name: webdeploy-your-mcp-domain-example
+Server name: webdeploy-your-mcp-domain-example-webdeploy
 MCP URL: <MCP_URL>
 
 Requirements:
@@ -277,10 +279,11 @@ sudo /etc/webdeploy/uninstall.sh --purge-data
 
 ## Nginx, HTTPS, and PM2
 
-The installer writes a new, dedicated Nginx file only after checking for `server_name` conflicts,
-runs `nginx -t`, and reloads only on success. It never edits an existing virtual host. With
-`--no-nginx`, configure a reverse proxy to the selected loopback control-plane port and disable
-buffering for `/mcp`.
+For an existing domain, the installer backs up the virtual host outside Nginx's loaded directories,
+adds one managed include, and proxies only `/webdeploy/`. The root site and its other locations are
+untouched. It runs `nginx -t` before reload and removes the include if validation fails. With
+`--no-nginx`, configure a path-stripping reverse proxy to the loopback control-plane port and
+disable buffering for MCP responses.
 
 Certbot is optional. If certificate issuance fails, installation remains usable locally and prints
 the exact retry command after DNS is fixed.
@@ -328,14 +331,15 @@ browser tests, and shell syntax checks on Ubuntu.
   that the app listens on injected `HOST=127.0.0.1` and `PORT`.
 - **Health check fails:** the candidate is removed and the old release remains active. Correct the
   path or application and redeploy.
-- **Nginx conflict:** remove or rename the existing `server_name`; the installer will not overwrite it.
+- **Nginx path conflict:** choose another `--path` if the existing virtual host already declares
+  `/webdeploy`.
 - **Certificate failure:** confirm DNS and inbound 80/443, then run the printed `certbot --nginx` command.
 - **Private Git:** use an SSH URL and install a read-only deploy key for the project's isolated Linux
   user. Never put credentials in a Git URL.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.3
+## Known limitations in v0.1.4
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload
