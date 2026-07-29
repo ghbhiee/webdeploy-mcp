@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="${WEBDEPLOY_VERSION:-v0.1.1}"
+VERSION="${WEBDEPLOY_VERSION:-v0.1.2}"
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 INSTALL_ROOT="/opt/webdeploy"
 DATA_DIR="/var/lib/webdeploy"
@@ -20,10 +20,11 @@ MISE_VERSION="v2026.7.16"
 usage() {
   cat <<'USAGE'
 Usage: sudo bash installer/install.sh [options]
+  --domain HOSTNAME             Dashboard and MCP domain
   --install-dir PATH
   --data-dir PATH
-  --dashboard-domain HOSTNAME
-  --mcp-domain HOSTNAME
+  --dashboard-domain HOSTNAME   Dashboard domain override
+  --mcp-domain HOSTNAME         MCP domain override
   --port NUMBER
   --admin IDENTITY
   --acme-email EMAIL
@@ -36,6 +37,7 @@ USAGE
 
 while (($#)); do
   case "$1" in
+    --domain) DASHBOARD_DOMAIN="$2"; MCP_DOMAIN="$2"; shift 2 ;;
     --install-dir) INSTALL_ROOT="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --dashboard-domain) DASHBOARD_DOMAIN="$2"; shift 2 ;;
@@ -77,6 +79,21 @@ prompt() {
   fi
   printf -v "$variable" '%s' "$value"
 }
+prompt_required() {
+  local variable="$1" text="$2" value
+  value="${!variable:-}"
+  if [[ "$NON_INTERACTIVE" == yes ]]; then
+    [[ -n "$value" ]] || {
+      echo "$text is required in non-interactive mode. Use --domain HOSTNAME." >&2
+      exit 2
+    }
+  else
+    while [[ -z "$value" ]]; do
+      read -r -p "$text (required): " value
+    done
+  fi
+  printf -v "$variable" '%s' "$value"
+}
 yesno() {
   local variable="$1" text="$2" default="$3" value
   if [[ "$NON_INTERACTIVE" == yes ]]; then value="${!variable:-$default}"
@@ -87,7 +104,7 @@ yesno() {
 
 prompt INSTALL_ROOT "Installation directory" "$INSTALL_ROOT"
 prompt DATA_DIR "Data directory" "$DATA_DIR"
-prompt DASHBOARD_DOMAIN "Dashboard domain" "${DASHBOARD_DOMAIN:-deploy.example.com}"
+prompt_required DASHBOARD_DOMAIN "Public Dashboard domain"
 prompt MCP_DOMAIN "MCP domain" "${MCP_DOMAIN:-$DASHBOARD_DOMAIN}"
 prompt INTERNAL_PORT "Internal control-plane port" "$INTERNAL_PORT"
 prompt ADMIN_IDENTITY "Initial administrator username or email" "${ADMIN_IDENTITY:-admin}"
@@ -317,6 +334,9 @@ fi
 
 created_release=no
 trap - EXIT
+WEBDEPLOY_ENV_FILE="$CONFIG_DIR/webdeploy.env" webdeploy mcp \
+  --output "$CONFIG_DIR/mcp-install.txt" >/dev/null
+chmod 0644 "$CONFIG_DIR/mcp-install.txt"
 cat <<RESULT
 
 WebDeploy MCP $VERSION installed successfully.
@@ -327,12 +347,15 @@ MCP endpoint: https://$MCP_DOMAIN/mcp
 1. Open the Dashboard and register a Passkey for: $ADMIN_IDENTITY
 2. List requests:  sudo webdeploy auth list-pending
 3. Approve it:     sudo webdeploy auth approve-passkey <request-code>
-4. Connect Codex:  codex mcp add webdeploy --url https://$MCP_DOMAIN/mcp
-5. Authenticate:   codex mcp login webdeploy
+4. View MCP setup:  webdeploy mcp
+5. Save MCP setup:  webdeploy mcp --output mcp-install.txt
 
 Logs:          sudo webdeploy logs
 Configuration: $CONFIG_DIR/webdeploy.env
+MCP setup file: $CONFIG_DIR/mcp-install.txt
 Data:          $DATA_DIR
 Update:        sudo webdeploy update
 Uninstall:     sudo webdeploy uninstall
 RESULT
+
+WEBDEPLOY_ENV_FILE="$CONFIG_DIR/webdeploy.env" webdeploy mcp

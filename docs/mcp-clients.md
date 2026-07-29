@@ -3,6 +3,18 @@
 WebDeploy exposes Streamable HTTP MCP at the configured `MCP_PUBLIC_URL` plus `/mcp`. It advertises
 OAuth protected-resource metadata and an authorization server rooted at `PUBLIC_URL`.
 
+The platform installer prints and saves these instructions. On an installed server, use:
+
+```bash
+webdeploy mcp
+webdeploy mcp --help
+webdeploy mcp --agent codex --method command
+webdeploy mcp --agent claude --method prompt --output claude-mcp.txt
+```
+
+The Dashboard provides the same choices as Agent and installation-method selectors with Copy and
+Download actions.
+
 ## Codex CLI
 
 ```bash

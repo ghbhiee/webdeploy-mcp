@@ -227,46 +227,72 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.mcp-client-grid {
+.mcp-install-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 24px;
 }
-.mcp-client-card,
-.agent-prompt-card {
+.mcp-install-controls label {
+  display: grid;
+  gap: 8px;
+  color: #c9d8e8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mcp-install-controls select {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #35516d;
+  border-radius: 11px;
+  background: #091522;
+  color: white;
+  padding: 0 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.mcp-install-controls small {
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+}
+.mcp-selected-install {
+  margin-top: 16px;
   padding: 19px;
   border: 1px solid var(--line);
   border-radius: 15px;
-  background: #091522cc;
+  background: linear-gradient(145deg, #091b23, #091522);
 }
-.mcp-client-card > div:first-child,
-.agent-prompt-heading > div {
+.mcp-selected-heading,
+.mcp-selected-heading > div {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
-.mcp-client-card h3,
-.agent-prompt-card h3 {
+.mcp-selected-heading h3 {
   margin: 0;
   font-size: 18px;
 }
-.mcp-client-card p,
-.agent-prompt-card > p {
-  min-height: 44px;
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-.mcp-client-card code,
-.agent-prompt-card code {
+.mcp-selected-heading > code {
+  max-width: 52%;
+  overflow: hidden;
   color: #c8dbf2;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .client-index {
   display: inline-grid;
   place-items: center;
-  min-width: 29px;
+  min-width: 46px;
   height: 25px;
   border: 1px solid #7ab7ff44;
   border-radius: 8px;
@@ -282,7 +308,7 @@ button {
 .copy-block pre {
   min-height: 94px;
   margin: 0;
-  padding: 16px 72px 16px 16px;
+  padding: 50px 16px 16px;
   overflow: auto;
   border: 1px solid #233b54;
   border-radius: 11px;
@@ -297,10 +323,14 @@ button {
 .copy-block.large pre {
   max-height: 360px;
 }
-.copy-block button {
+.copy-actions {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 7px;
+}
+.copy-actions button {
   padding: 6px 9px;
   border: 1px solid #38536f;
   border-radius: 8px;
@@ -309,30 +339,18 @@ button {
   font-size: 11px;
   font-weight: 750;
 }
-.copy-block button:hover {
+.copy-actions button:hover {
   border-color: var(--blue);
   color: white;
 }
-.agent-prompt-card {
-  margin-top: 14px;
-  border-color: #67e8b43d;
-  background: linear-gradient(145deg, #0a1b23, #091522);
+.mcp-next-step {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
 }
-.agent-prompt-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-.agent-prompt-heading > span {
-  padding: 5px 8px;
-  border-radius: 7px;
-  background: var(--mint);
-  color: var(--mint-dark);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.mcp-next-step strong {
+  color: var(--mint);
 }
 .project-grid {
   display: grid;
@@ -808,7 +826,7 @@ td small {
   .content {
     padding: 34px 20px 70px;
   }
-  .mcp-client-grid {
+  .mcp-install-controls {
     grid-template-columns: 1fr;
   }
   .auth-page {
@@ -837,9 +855,14 @@ td small {
     flex-direction: column;
     gap: 14px;
   }
-  .mcp-client-card p,
-  .agent-prompt-card > p {
-    min-height: auto;
+  .mcp-selected-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mcp-selected-heading > code {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .settings-grid,
   .two-column {

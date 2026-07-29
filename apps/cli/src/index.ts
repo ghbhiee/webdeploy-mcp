@@ -1,20 +1,29 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { loadEnvFile } from "node:process";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Command } from "commander";
+import type { McpAgentId, McpInstallMethodId } from "@webdeploy/core";
 
 const envFile = process.env.WEBDEPLOY_ENV_FILE ?? "/etc/webdeploy/webdeploy.env";
 if (existsSync(envFile)) loadEnvFile(envFile);
 
-const { AppError, createDatabase, loadConfig, writeAudit } = await import("@webdeploy/core");
+const {
+  AppError,
+  createDatabase,
+  createMcpInstallCatalog,
+  loadConfig,
+  renderMcpInstallGuide,
+  writeAudit,
+} = await import("@webdeploy/core");
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
 const program = new Command()
   .name("webdeploy")
   .description("Administer a local WebDeploy MCP installation")
-  .version("0.1.1");
+  .version("0.1.2");
 
 program
   .command("status")
@@ -95,6 +104,50 @@ program
     });
     printRows(rows);
     if (rows.some((row) => row.status !== "ok")) process.exitCode = 1;
+  });
+
+program
+  .command("mcp")
+  .description("Show copy-ready MCP installation instructions")
+  .option("-a, --agent <agent>", "Agent: codex, claude, or generic")
+  .option("-m, --method <method>", "Method: command, prompt, or manual")
+  .option("-o, --output <file>", "Also save the instructions to a file")
+  .option("--raw", "Print only the copyable content; requires --agent")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  webdeploy mcp
+  webdeploy mcp --agent codex --method command
+  webdeploy mcp --agent claude --method prompt --output claude-mcp.txt
+  webdeploy mcp --agent generic --method manual --raw`,
+  )
+  .action(async (options: { agent?: string; method?: string; output?: string; raw?: boolean }) => {
+    const agents = new Set<McpAgentId>(["codex", "claude", "generic"]);
+    const methods = new Set<McpInstallMethodId>(["command", "prompt", "manual"]);
+    if (options.agent && !agents.has(options.agent as McpAgentId)) {
+      throw new Error("--agent must be codex, claude, or generic.");
+    }
+    if (options.method && !methods.has(options.method as McpInstallMethodId)) {
+      throw new Error("--method must be command, prompt, or manual.");
+    }
+    if (options.raw && !options.agent) throw new Error("--raw requires --agent.");
+
+    const selection: {
+      agent?: McpAgentId;
+      method?: McpInstallMethodId;
+      raw?: boolean;
+    } = {};
+    if (options.agent) selection.agent = options.agent as McpAgentId;
+    if (options.method) selection.method = options.method as McpInstallMethodId;
+    if (options.raw) selection.raw = true;
+    const guide = renderMcpInstallGuide(createMcpInstallCatalog(config.MCP_PUBLIC_URL), selection);
+    process.stdout.write(guide);
+    if (options.output) {
+      const destination = resolve(options.output);
+      await writeFile(destination, guide, { encoding: "utf8", mode: 0o644 });
+      console.log(`Saved MCP installation instructions to ${destination}`);
+    }
   });
 
 const auth = program.command("auth").description("Manage pending Passkey enrollment");

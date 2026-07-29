@@ -5,6 +5,7 @@ export * from "./crypto.js";
 export * from "./db.js";
 export * from "./errors.js";
 export * from "./migrate.js";
+export * from "./mcp-install.js";
 export * from "./projects.js";
 export * from "./deployments.js";
 export * from "./redaction.js";

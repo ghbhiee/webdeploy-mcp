@@ -2,6 +2,20 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.2] - 2026-07-29
+
+### Added
+
+- `webdeploy mcp` command with Agent/method selection, raw output, file export, and `--help`
+- Dashboard MCP installer with Agent and installation-method selectors plus Copy and Download
+- Shared domain-aware installation content for Codex, Claude Code, and generic MCP Agents
+- Installer-generated `/etc/webdeploy/mcp-install.txt`
+
+### Changed
+
+- Installation now requires an explicit public domain and supports the concise `--domain` option
+- Successful installation prints the complete MCP connection guide instead of Codex-only hints
+
 ## [0.1.1] - 2026-07-29
 
 ### Added

@@ -442,17 +442,26 @@ test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ brow
   await expect(
     page.getByText(`codex mcp add webdeploy --url ${mcpUrl}`, { exact: false }),
   ).toBeVisible();
+  await page.getByLabel("Agent", { exact: true }).selectOption("claude");
   await expect(
     page.getByText(`claude mcp add --transport http --scope user webdeploy ${mcpUrl}`, {
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.getByText("Install from any Agent")).toBeVisible();
+  await page.getByLabel("Installation method", { exact: true }).selectOption("prompt");
   await expect(
-    page.getByText('call the "platform_status" and "list_projects" tools'),
+    page.getByText("Install WebDeploy MCP in this Claude Code session.", { exact: false }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Download webdeploy-mcp-claude-prompt.txt" }),
+  ).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download webdeploy-mcp-claude-prompt.txt" }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe("webdeploy-mcp-claude-prompt.txt");
   const publicSession = await request.get("/api/auth/session");
-  expect((await publicSession.json()).mcpUrl).toBe(mcpUrl);
+  const publicSessionBody = await publicSession.json();
+  expect(publicSessionBody.mcpUrl).toBe(mcpUrl);
+  expect(publicSessionBody.mcpInstall.agents).toHaveLength(3);
 
   await page.getByRole("button", { name: "New project" }).click();
   await page.getByLabel("Project name").fill("Passkey Test Site");

@@ -3,6 +3,28 @@ export interface Session {
   user?: { id: string; username: string; isAdmin: boolean; status: string };
   csrfToken?: string;
   mcpUrl?: string;
+  mcpInstall?: McpInstallCatalog;
+}
+
+export interface McpInstallCatalog {
+  mcpUrl: string;
+  agents: McpInstallAgent[];
+}
+
+export interface McpInstallAgent {
+  id: "codex" | "claude" | "generic";
+  label: string;
+  description: string;
+  methods: McpInstallMethod[];
+}
+
+export interface McpInstallMethod {
+  id: "command" | "prompt" | "manual";
+  label: string;
+  description: string;
+  content: string;
+  nextStep: string;
+  fileName: string;
 }
 
 let csrfToken = "";

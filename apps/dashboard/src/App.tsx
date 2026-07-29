@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
-import { api, setCsrf, type Session } from "./api";
+import { api, setCsrf, type McpInstallCatalog, type McpInstallMethod, type Session } from "./api";
 
 type Project = {
   id: string;
@@ -86,11 +86,7 @@ export function App() {
       ) : path === "/admin" && session.user?.isAdmin ? (
         <AdminPage show={show} />
       ) : (
-        <ProjectsPage
-          navigate={navigate}
-          show={show}
-          mcpUrl={session.mcpUrl ?? `${location.origin}/mcp`}
-        />
+        <ProjectsPage navigate={navigate} show={show} mcpInstall={session.mcpInstall} />
       )}
     </Shell>
   );
@@ -148,11 +144,11 @@ function Shell({
 function ProjectsPage({
   navigate,
   show,
-  mcpUrl,
+  mcpInstall,
 }: {
   navigate: (path: string) => void;
   show: (kind: "error" | "success", text: string) => void;
-  mcpUrl: string;
+  mcpInstall?: McpInstallCatalog;
 }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +176,7 @@ function ProjectsPage({
           New project
         </button>
       </header>
-      <McpInstallPanel mcpUrl={mcpUrl} show={show} />
+      {mcpInstall ? <McpInstallPanel catalog={mcpInstall} show={show} /> : null}
       {loading ? (
         <Loading />
       ) : projects.length ? (
@@ -222,30 +218,17 @@ function ProjectsPage({
   );
 }
 
-const OAUTH_SCOPES = "openid,profile,platform:read,projects:write,deployments:write,offline_access";
-
 function McpInstallPanel({
-  mcpUrl,
+  catalog,
   show,
 }: {
-  mcpUrl: string;
+  catalog: McpInstallCatalog;
   show: (kind: "error" | "success", text: string) => void;
 }) {
-  const codexCommand = `codex mcp add webdeploy --url ${mcpUrl} --oauth-resource ${mcpUrl}
-codex mcp login webdeploy --scopes ${OAUTH_SCOPES}`;
-  const claudeCommand = `claude mcp add --transport http --scope user webdeploy ${mcpUrl}`;
-  const agentPrompt = `Install the WebDeploy MCP server in this agent.
-
-Server name: webdeploy
-MCP URL: ${mcpUrl}
-
-Requirements:
-1. Detect the current client (Codex, Claude Code, or another MCP-capable agent).
-2. Install this as a user/global remote Streamable HTTP MCP server using the client's native configuration. Do not use a stdio bridge and do not ask me to paste an access token.
-3. Immediately start the client's OAuth Authorization Code + PKCE flow and open the system browser. For Codex, use "codex mcp login webdeploy". For Claude Code, open "/mcp", select "webdeploy", and choose "Authenticate".
-4. Wait while I finish WebDeploy Passkey login and consent in the browser.
-5. After authorization, call the "platform_status" and "list_projects" tools to verify the connection.
-6. Report where the MCP configuration was saved and whether both verification calls succeeded.`;
+  const [agentId, setAgentId] = useState(catalog.agents[0]!.id);
+  const [methodId, setMethodId] = useState(catalog.agents[0]!.methods[0]!.id);
+  const agent = catalog.agents.find((candidate) => candidate.id === agentId) ?? catalog.agents[0]!;
+  const method = agent.methods.find((candidate) => candidate.id === methodId) ?? agent.methods[0]!;
 
   return (
     <section className="mcp-install-panel" aria-labelledby="mcp-install-title">
@@ -253,48 +236,81 @@ Requirements:
         <div>
           <p className="eyebrow">AI connection</p>
           <h2 id="mcp-install-title">Install WebDeploy MCP</h2>
-          <p>
-            Use native remote HTTP support. Authentication opens WebDeploy in your browser—never
-            paste an access token into a config file.
-          </p>
+          <p>Select your Agent and method, then copy one ready-to-use block.</p>
         </div>
-        <span className="protocol-badge">OAuth + PKCE</span>
+        <span className="protocol-badge">MCP · OAuth</span>
       </div>
-      <div className="mcp-client-grid">
-        <article className="mcp-client-card">
-          <div>
-            <span className="client-index">01</span>
-            <h3>Codex</h3>
-          </div>
-          <p>Run both commands. The login command immediately opens browser authentication.</p>
-          <CopyBlock label="Copy Codex commands" value={codexCommand} show={show} />
-        </article>
-        <article className="mcp-client-card">
-          <div>
-            <span className="client-index">02</span>
-            <h3>Claude Code</h3>
-          </div>
-          <p>
-            Add the server, open Claude Code, enter <code>/mcp</code>, then choose{" "}
-            <strong>webdeploy → Authenticate</strong>. Claude opens the browser.
-          </p>
-          <CopyBlock label="Copy Claude command" value={claudeCommand} show={show} />
-        </article>
+
+      <div className="mcp-install-controls">
+        <label>
+          Agent
+          <select
+            aria-label="Agent"
+            value={agent.id}
+            onChange={(event) => {
+              const nextAgent =
+                catalog.agents.find((candidate) => candidate.id === event.target.value) ??
+                catalog.agents[0]!;
+              setAgentId(nextAgent.id);
+              setMethodId(nextAgent.methods[0]!.id);
+            }}
+          >
+            {catalog.agents.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.label}
+              </option>
+            ))}
+          </select>
+          <small>{agent.description}</small>
+        </label>
+        <label>
+          Installation method
+          <select
+            aria-label="Installation method"
+            value={method.id}
+            onChange={(event) => setMethodId(event.target.value as McpInstallMethod["id"])}
+          >
+            {agent.methods.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.label}
+              </option>
+            ))}
+          </select>
+          <small>{method.description}</small>
+        </label>
       </div>
-      <article className="agent-prompt-card">
-        <div className="agent-prompt-heading">
+
+      <div className="mcp-selected-install">
+        <div className="mcp-selected-heading">
           <div>
-            <span className="client-index">03</span>
-            <h3>Install from any Agent</h3>
+            <span className="client-index">READY</span>
+            <h3>
+              {agent.label} · {method.label}
+            </h3>
           </div>
-          <span>Recommended</span>
+          <code>{catalog.mcpUrl}</code>
         </div>
-        <p>
-          Paste this single prompt into your coding Agent. It tells the Agent to install,
-          authenticate in the browser, and verify the connection.
+        <CopyBlock
+          label={`Copy ${agent.label} ${method.label}`}
+          value={method.content}
+          downloadValue={`WebDeploy MCP installation
+
+Agent: ${agent.label}
+Method: ${method.label}
+MCP endpoint: ${catalog.mcpUrl}
+
+${method.content}
+
+Next: ${method.nextStep}
+`}
+          fileName={method.fileName}
+          show={show}
+          large
+        />
+        <p className="mcp-next-step">
+          <strong>Next:</strong> {method.nextStep}
         </p>
-        <CopyBlock label="Copy Agent install prompt" value={agentPrompt} show={show} large />
-      </article>
+      </div>
     </section>
   );
 }
@@ -302,11 +318,15 @@ Requirements:
 function CopyBlock({
   label,
   value,
+  downloadValue,
+  fileName,
   show,
   large = false,
 }: {
   label: string;
   value: string;
+  downloadValue?: string;
+  fileName?: string;
   show: (kind: "error" | "success", text: string) => void;
   large?: boolean;
 }) {
@@ -315,20 +335,40 @@ function CopyBlock({
       <pre>
         <code>{value}</code>
       </pre>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(value);
-            show("success", "Copied to clipboard.");
-          } catch {
-            show("error", "Clipboard access failed. Select and copy the text manually.");
-          }
-        }}
-      >
-        Copy
-      </button>
+      <div className="copy-actions">
+        <button
+          type="button"
+          aria-label={label}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(value);
+              show("success", "Copied. Paste it into your terminal or Agent.");
+            } catch {
+              show("error", "Clipboard access failed. Select and copy the text manually.");
+            }
+          }}
+        >
+          Copy
+        </button>
+        {fileName ? (
+          <button
+            type="button"
+            aria-label={`Download ${fileName}`}
+            onClick={() => {
+              const url = URL.createObjectURL(
+                new Blob([downloadValue ?? `${value}\n`], { type: "text/plain" }),
+              );
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = fileName;
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Download
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

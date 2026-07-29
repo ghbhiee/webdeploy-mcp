@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.1 adds guided Codex and Claude Code MCP installation. Test on a
-> non-production server before adopting it for critical workloads.
+> **Release status:** v0.1.2 adds domain-aware MCP installation from the installer, CLI, and
+> Dashboard. Test on a non-production server before adopting it for critical workloads.
 
 ## What it provides
 
@@ -80,23 +80,32 @@ Or run the bootstrap directly:
 curl -fsSL https://raw.githubusercontent.com/ghbhiee/webdeploy-mcp/main/install.sh | sudo bash
 ```
 
-The interactive installer asks for installation/data paths, Dashboard and MCP domains, internal
-port, bootstrap administrator identity, Nginx, HTTPS, ACME email, and automatic updates. It stops
-if the selected port or Nginx `server_name` is already in use.
+The public domain is required during installation. The interactive installer asks for it; the MCP
+domain defaults to the same value but can be overridden. Installation stops if the selected port
+or Nginx `server_name` is already in use.
 
 For unattended installation:
 
 ```bash
 sudo bash install.sh \
   --non-interactive \
-  --dashboard-domain deploy.example.com \
-  --mcp-domain deploy.example.com \
+  --domain deploy.example.com \
   --admin admin@example.com \
   --acme-email admin@example.com \
   --auto-update
 ```
 
 Substitute domains and identities with your own values. None are compiled into the project.
+
+At completion, the installer prints the MCP setup for Codex, Claude Code, and other Agents and
+saves the same guide to `/etc/webdeploy/mcp-install.txt`. View or save it again at any time:
+
+```bash
+webdeploy mcp
+webdeploy mcp --help
+webdeploy mcp --agent codex --method command
+webdeploy mcp --agent claude --method prompt --output claude-mcp.txt
+```
 
 ## First sign-in and Passkey approval
 
@@ -138,9 +147,9 @@ The previous release is not stopped until the candidate passes its health check 
 Environment values are write-only after submission. Even administrators and MCP clients receive
 only variable names, type, presence, and timestamps.
 
-The Dashboard home page shows the deployment's exact MCP URL, copy-ready Codex and Claude Code
-commands, and one universal Agent install prompt. Authentication always continues in the browser;
-access tokens are never copied into configuration.
+The Dashboard home page is also the MCP installer: select **Agent** and **Installation method**,
+then copy or download the generated command, Agent prompt, or manual configuration. Every result
+already contains the deployment's exact MCP URL.
 
 ## MCP clients
 
@@ -334,7 +343,7 @@ browser tests, and shell syntax checks on Ubuntu.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.1
+## Known limitations in v0.1.2
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload

@@ -5,7 +5,14 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import { AppError, randomToken, writeAudit, type Config, type Database } from "@webdeploy/core";
+import {
+  AppError,
+  createMcpInstallCatalog,
+  randomToken,
+  writeAudit,
+  type Config,
+  type Database,
+} from "@webdeploy/core";
 import { createSession, clearSessionCookie, readSession, setSessionCookie } from "./session.js";
 
 interface AuthDependencies {
@@ -256,16 +263,17 @@ export async function registerPasskeyRoutes(
 
   app.get("/api/auth/session", async (request) => {
     const session = await readSession(request, database, config);
-    const mcpUrl = `${config.MCP_PUBLIC_URL}/mcp`;
+    const mcpInstall = createMcpInstallCatalog(config.MCP_PUBLIC_URL);
     return session
       ? {
           authenticated: true,
           user: session.actor,
           csrfToken: session.csrfToken,
           expiresAt: session.expiresAt,
-          mcpUrl,
+          mcpUrl: mcpInstall.mcpUrl,
+          mcpInstall,
         }
-      : { authenticated: false, mcpUrl };
+      : { authenticated: false, mcpUrl: mcpInstall.mcpUrl, mcpInstall };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
