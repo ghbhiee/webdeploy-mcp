@@ -16,8 +16,9 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/webdeploy_test
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/webdeploy_test
-      PUBLIC_URL: http://127.0.0.1:3847
-      MCP_PUBLIC_URL: http://127.0.0.1:3847
+      PUBLIC_URL: http://localhost:3847
+      MCP_PUBLIC_URL: http://localhost:3847
+      TEST_BASE_URL: http://localhost:3847
       DATA_DIR: /tmp/webdeploy-data
       CONFIG_DIR: /tmp/webdeploy-config
       MASTER_KEY_FILE: /tmp/webdeploy-config/master.key
@@ -51,7 +52,7 @@ jobs:
           node packages/core/dist/migrate.js
           printf '%s\n' \
             "NODE_ENV=test" "HOST=127.0.0.1" "PORT=3847" \
-            "PUBLIC_URL=http://127.0.0.1:3847" "MCP_PUBLIC_URL=http://127.0.0.1:3847" \
+            "PUBLIC_URL=http://localhost:3847" "MCP_PUBLIC_URL=http://localhost:3847" \
             "DATABASE_URL=$DATABASE_URL" "DATA_DIR=/tmp/webdeploy-data" \
             "CONFIG_DIR=/tmp/webdeploy-config" \
             "MASTER_KEY_FILE=/tmp/webdeploy-config/master.key" \
