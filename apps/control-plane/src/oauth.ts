@@ -118,6 +118,22 @@ export async function createOAuthRuntime(
     },
   });
 
+  // Codex CLI 0.145.0 drops `iss` while relaying the loopback callback, then
+  // rejects the response when discovery advertises RFC 9207 support. Keep
+  // sending `iss`, but advertise the temporary compatibility value until that
+  // client bug is fixed.
+  provider.use(async (context: any, next: () => Promise<void>) => {
+    await next();
+    if (
+      (context.path === "/.well-known/openid-configuration" ||
+        context.path === "/.well-known/oauth-authorization-server") &&
+      context.body &&
+      typeof context.body === "object"
+    ) {
+      context.body.authorization_response_iss_parameter_supported = false;
+    }
+  });
+
   provider.on("server_error", (error: Error) => app.log.error(error, "OAuth provider error"));
 
   registerProtectedResourceMetadata(app, config);
@@ -204,6 +220,22 @@ function registerInteractionRoutes(
       const returnTo = encodeURIComponent(`/oauth/interaction/${uid}`);
       return reply.redirect(`/login?returnTo=${returnTo}`);
     }
+    if (details.prompt.name === "login") {
+      await provider.interactionFinished(
+        request.raw,
+        reply.raw,
+        {
+          login: {
+            accountId: session.actor.id,
+            acr: "urn:webauthn:passkey",
+            amr: ["webauthn", "mfa"],
+            remember: false,
+          },
+        },
+        { mergeWithLastSubmission: false },
+      );
+      return;
+    }
     const client = await provider.Client.find(details.params.client_id);
     const requestedScopes = String(details.params.scope ?? "")
       .split(/\s+/)
@@ -240,6 +272,9 @@ button{padding:12px 18px;border:0;border-radius:9px;font-weight:700;cursor:point
       );
       return;
     }
+    if (details.prompt.name !== "consent") {
+      throw new AppError("OAUTH_PROMPT_INVALID", "Unexpected OAuth interaction prompt", 400);
+    }
     let grant = details.grantId ? await provider.Grant.find(details.grantId) : undefined;
     if (!grant) {
       grant = new provider.Grant({
@@ -247,13 +282,25 @@ button{padding:12px 18px;border:0;border-radius:9px;font-weight:700;cursor:point
         clientId: details.params.client_id,
       });
     }
+    const prompt = details.prompt.details;
+    if (prompt.missingOIDCScope) {
+      grant.addOIDCScope(prompt.missingOIDCScope.join(" "));
+    }
+    if (prompt.missingOIDCClaims) {
+      grant.addOIDCClaims(prompt.missingOIDCClaims);
+    }
+    if (prompt.missingResourceScopes) {
+      for (const [resource, scopes] of Object.entries(
+        prompt.missingResourceScopes as Record<string, string[]>,
+      )) {
+        grant.addResourceScope(resource, scopes.join(" "));
+      }
+    }
+    const grantId = await grant.save();
+    const consent = details.grantId ? {} : { grantId };
     const scopes = String(details.params.scope ?? "")
       .split(/\s+/)
       .filter(Boolean);
-    grant.addOIDCScope(scopes.join(" "));
-    const resource = details.params.resource;
-    if (resource) grant.addResourceScope(resource, scopes.join(" "));
-    const grantId = await grant.save();
     await writeAudit(database, {
       actorUserId: session.actor.id,
       action: "oauth.consent.granted",
@@ -264,15 +311,7 @@ button{padding:12px 18px;border:0;border-radius:9px;font-weight:700;cursor:point
     await provider.interactionFinished(
       request.raw,
       reply.raw,
-      {
-        login: {
-          accountId: session.actor.id,
-          acr: "urn:webauthn:passkey",
-          amr: ["webauthn", "mfa"],
-          remember: false,
-        },
-        consent: { grantId },
-      },
+      { consent },
       { mergeWithLastSubmission: true },
     );
   });

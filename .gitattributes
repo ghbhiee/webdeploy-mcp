@@ -1,0 +1,2 @@
+*.sh text eol=lf
+installer/bin/* text eol=lf

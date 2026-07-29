@@ -58,6 +58,13 @@ export async function buildApp(config: Config = loadConfig()) {
         connectSrc: ["'self'"],
         imgSrc: ["'self'", "data:"],
         frameAncestors: ["'none'"],
+        // OAuth native-app redirects can leave the origin after a same-origin
+        // consent form submission, so the default form-action 'self' is too
+        // restrictive for the redirect chain.
+        formAction: null,
+        // Native OAuth clients legitimately redirect to an HTTP loopback
+        // listener. HSTS protects deployed HTTPS origins without breaking it.
+        upgradeInsecureRequests: null,
       },
     },
   });

@@ -49,7 +49,7 @@ jobs:
           mkdir -p /tmp/webdeploy-config /tmp/webdeploy-data
           openssl rand -base64 32 >/tmp/webdeploy-config/master.key
           node installer/generate-jwks.mjs /tmp/webdeploy-config/oidc-jwks.json
-          node packages/core/dist/migrate.js
+          node packages/core/dist/migrate-cli.js
           printf '%s\n' \
             "NODE_ENV=test" "HOST=127.0.0.1" "PORT=3847" \
             "PUBLIC_URL=http://localhost:3847" "MCP_PUBLIC_URL=http://localhost:3847" \

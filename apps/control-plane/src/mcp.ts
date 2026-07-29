@@ -35,7 +35,9 @@ export function registerMcpRoute(
     const actor = authenticated.actor;
     const scopes = new Set(String(authenticated.token.scope ?? "").split(/\s+/));
     const server = createMcpServer(dependencies, actor, scopes);
-    const transport = new StreamableHTTPServerTransport();
+    const transport = new StreamableHTTPServerTransport({
+      enableJsonResponse: true,
+    });
     reply.hijack();
     await server.connect(transport as any);
     await transport.handleRequest(request.raw, reply.raw, request.body);

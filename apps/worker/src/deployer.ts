@@ -92,6 +92,7 @@ export class Deployer {
           throw new Error("Configured static output directory does not exist");
         const entries = await readdir(outputPath);
         if (!entries.length) throw new Error("Static output directory is empty");
+        await this.grantNginxReadAccess(projectRoot, releaseRoot, outputPath);
         await this.status(deploymentId, "health_checking");
       } else {
         if (!project.start_command) throw new Error("Dynamic project requires a start command");
@@ -104,12 +105,7 @@ export class Deployer {
           osUser,
           cwd: releaseRoot,
           startCommand: `${runtime}${project.start_command}`,
-          environment: {
-            ...env.values,
-            PORT: String(port),
-            HOST: "127.0.0.1",
-            NODE_ENV: "production",
-          },
+          environment: this.applicationEnvironment(osUser, projectRoot, port, env.values),
           knownSecrets: env.secrets,
         });
         await this.status(deploymentId, "health_checking");
@@ -300,8 +296,11 @@ export class Deployer {
 
   private async ensureProjectUser(project: any): Promise<{ osUser: string; projectRoot: string }> {
     const osUser = project.os_user || `wdp-${project.id.replaceAll("-", "").slice(0, 12)}`;
+    const projectsRoot = safeChild(this.config.DATA_DIR, "projects");
     const projectRoot = safeChild(this.config.DATA_DIR, "projects", project.id);
     await mkdir(safeChild(projectRoot, "releases"), { recursive: true, mode: 0o750 });
+    // Project users and Nginx need traversal, but must not be able to list other project IDs.
+    await chmod(projectsRoot, 0o711);
     if (!project.os_user) {
       const exists = await runCommand("id", ["-u", osUser]).then(
         () => true,
@@ -352,6 +351,20 @@ export class Deployer {
     return { values, secrets };
   }
 
+  private async grantNginxReadAccess(
+    projectRoot: string,
+    releaseRoot: string,
+    outputPath: string,
+  ): Promise<void> {
+    const releasesRoot = safeChild(projectRoot, "releases");
+    // Supported Debian and Ubuntu installations run Nginx workers as www-data.
+    // Only the published static output and its traversal path are shared with that group.
+    await runCommand("chgrp", ["www-data", projectRoot, releasesRoot, releaseRoot]);
+    await runCommand("chmod", ["g+rx", projectRoot, releasesRoot, releaseRoot]);
+    await runCommand("chgrp", ["-R", "www-data", outputPath]);
+    await runCommand("chmod", ["-R", "g+rX", outputPath]);
+  }
+
   private runtimeCommandPrefix(project: any): string {
     if (this.config.RUNTIME_MANAGER !== "mise") return "";
     const tools = [
@@ -359,6 +372,24 @@ export class Deployer {
       project.python_version ? `python@${shellQuote(project.python_version)}` : "",
     ].filter(Boolean);
     return tools.length ? `mise exec ${tools.join(" ")} -- ` : "";
+  }
+
+  private applicationEnvironment(
+    osUser: string,
+    projectRoot: string,
+    port: number,
+    values: NodeJS.ProcessEnv,
+  ): NodeJS.ProcessEnv {
+    return {
+      ...values,
+      HOME: projectRoot,
+      USER: osUser,
+      LOGNAME: osUser,
+      SHELL: "/bin/bash",
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      NODE_ENV: "production",
+    };
   }
 
   private async runBuildCommand(
@@ -454,12 +485,18 @@ export class Deployer {
   private async restartProject(project: any, reconcile = false): Promise<void> {
     if (project.type === "static" || !project.current_release_id) return;
     const env = await this.loadEnvironment(project.id);
+    const release = (
+      await this.database.query("SELECT * FROM releases WHERE id=$1", [project.current_release_id])
+    ).rows[0];
+    if (!release) throw new Error("Active release not found");
+    const projectRoot = dirname(dirname(release.path));
+    const applicationEnvironment = this.applicationEnvironment(
+      project.os_user,
+      projectRoot,
+      release.port,
+      env.values,
+    );
     if (reconcile) {
-      const release = (
-        await this.database.query("SELECT * FROM releases WHERE id=$1", [
-          project.current_release_id,
-        ])
-      ).rows[0];
       await startReleaseProcess({
         config: this.config,
         projectId: project.id,
@@ -467,22 +504,20 @@ export class Deployer {
         osUser: project.os_user,
         cwd: release.path,
         startCommand: `${this.runtimeCommandPrefix(project)}${project.start_command}`,
-        environment: {
-          ...env.values,
-          PORT: String(release.port),
-          HOST: "127.0.0.1",
-          NODE_ENV: "production",
-        },
+        environment: applicationEnvironment,
         knownSecrets: env.secrets,
       });
     } else {
-      await restartReleaseProcess(
-        this.config,
-        project.id,
-        project.current_release_id,
-        env.values,
-        env.secrets,
-      );
+      await restartReleaseProcess({
+        config: this.config,
+        projectId: project.id,
+        releaseId: project.current_release_id,
+        osUser: project.os_user,
+        cwd: release.path,
+        startCommand: `${this.runtimeCommandPrefix(project)}${project.start_command}`,
+        environment: applicationEnvironment,
+        knownSecrets: env.secrets,
+      });
     }
   }
 
@@ -504,12 +539,12 @@ export class Deployer {
         osUser: project.os_user,
         cwd: release.path,
         startCommand: `${this.runtimeCommandPrefix(project)}${project.start_command}`,
-        environment: {
-          ...env.values,
-          PORT: String(release.port),
-          HOST: "127.0.0.1",
-          NODE_ENV: "production",
-        },
+        environment: this.applicationEnvironment(
+          project.os_user,
+          dirname(dirname(release.path)),
+          release.port,
+          env.values,
+        ),
         knownSecrets: env.secrets,
       });
       await waitForHealth(release.port, project.health_check_path, 45_000);
