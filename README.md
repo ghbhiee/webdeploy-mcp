@@ -7,7 +7,7 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.6 supports one-command installation under `/webdeploy` on an existing
+> **Release status:** v0.1.7 supports one-command installation under `/webdeploy` on an existing
 > domain and Nginx virtual host.
 
 ## What it provides
@@ -102,9 +102,9 @@ webdeploy mcp --agent claude --method prompt --output claude-mcp.txt
 
 ## First sign-in and Passkey approval
 
-1. Open the Dashboard URL and register a Passkey with the bootstrap identity.
-2. The page shows a short request code. The Passkey cannot sign in yet.
-3. On the server, review and approve it:
+1. Open the Dashboard URL and register the first account with an email address and Passkey.
+2. The first completed enrollment activates immediately as the system administrator.
+3. Later users and additional Passkeys wait for approval in **Dashboard > Administration** or CLI:
 
 ```bash
 sudo webdeploy auth list-pending
@@ -117,9 +117,9 @@ Reject an unexpected request with:
 sudo webdeploy auth reject-passkey <request-code>
 ```
 
-The approved bootstrap identity becomes the first administrator. Later enrollments can also be
-approved in the Dashboard. Revoking a Passkey revokes its web sessions; disabling a user also
-invalidates that user's OAuth objects.
+Email is the only account identifier. The same email account can enroll multiple Passkeys.
+Revoking a Passkey revokes its web sessions; disabling a user also invalidates that user's OAuth
+objects.
 
 ## Dashboard workflow
 
@@ -339,7 +339,7 @@ browser tests, and shell syntax checks on Ubuntu.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.6
+## Known limitations in v0.1.7
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload

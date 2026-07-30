@@ -961,20 +961,31 @@ function AdminPage({ show }: { show: (kind: "error" | "success", text: string) =
         {pending.map((item) => (
           <article className="approval-row" key={item.id}>
             <div>
-              <strong>{item.username}</strong>
+              <strong>{item.email}</strong>
               <small>
-                {item.email || "No email"} · <code>{item.request_code}</code>
+                {item.user_status === "active" ? "Additional Passkey" : "New user"} ·{" "}
+                {item.passkey_name || "Passkey"} · <code>{item.request_code}</code>
               </small>
             </div>
             <button
               className="primary"
               onClick={async () => {
                 await api(`/api/admin/passkeys/${item.request_code}/approve`, { method: "POST" });
-                show("success", `Approved ${item.username}.`);
+                show("success", `Approved ${item.email}.`);
                 load();
               }}
             >
               Approve
+            </button>
+            <button
+              className="danger-link"
+              onClick={async () => {
+                await api(`/api/admin/passkeys/${item.request_code}/reject`, { method: "POST" });
+                show("success", `Rejected ${item.email}.`);
+                load();
+              }}
+            >
+              Reject
             </button>
           </article>
         ))}
@@ -997,8 +1008,7 @@ function AdminPage({ show }: { show: (kind: "error" | "success", text: string) =
               {users.map((user) => (
                 <tr key={user.id}>
                   <td>
-                    <strong>{user.username}</strong>
-                    <small>{user.email}</small>
+                    <strong>{user.email}</strong>
                   </td>
                   <td>{user.status}</td>
                   <td>{user.is_admin ? "Administrator" : "Member"}</td>
@@ -1070,8 +1080,14 @@ function LoginPage({ navigate, show, notice, onAuthenticated }: any) {
       {notice && <Notice {...notice} />}
       <form className="auth-form" onSubmit={submit}>
         <label>
-          Username or email
-          <input name="identifier" autoComplete="username webauthn" autoFocus required />
+          Email
+          <input
+            name="identifier"
+            type="email"
+            autoComplete="username webauthn"
+            autoFocus
+            required
+          />
         </label>
         <button className="primary" disabled={busy}>
           {busy ? "Waiting for Passkey…" : "Continue with Passkey"}
@@ -1094,7 +1110,7 @@ function RegisterPage({ navigate, show, notice }: any) {
       const data = new FormData(event.currentTarget);
       const challenge = await api<any>("/api/auth/register/options", {
         method: "POST",
-        body: JSON.stringify({ username: data.get("username"), email: data.get("email") }),
+        body: JSON.stringify({ email: data.get("email") }),
       });
       const response = await startRegistration({ optionsJSON: challenge.options });
       setPending(
@@ -1117,29 +1133,31 @@ function RegisterPage({ navigate, show, notice }: any) {
     <AuthLayout
       eyebrow="Passkey enrollment"
       title="Create your identity"
-      copy="A server administrator must approve every new Passkey before it can access projects or MCP tools."
+      copy="The first account becomes administrator. Later users and additional Passkeys require approval."
     >
       {notice && <Notice {...notice} />}
       {pending ? (
         <div className="pending-card">
           <span className="pending-icon">✓</span>
-          <h2>Passkey registered</h2>
-          <p>Ask the server administrator to run:</p>
-          <code>{pending.approvalCommand}</code>
-          <p>
-            Request code: <strong>{pending.requestCode}</strong>
-          </p>
+          <h2>{pending.firstAdministrator ? "Administrator created" : "Passkey registered"}</h2>
+          {pending.firstAdministrator ? (
+            <p>This first account is active and has administrator access.</p>
+          ) : (
+            <>
+              <p>An administrator can approve this request in the Dashboard or run:</p>
+              <code>{pending.approvalCommand}</code>
+              <p>
+                Request code: <strong>{pending.requestCode}</strong>
+              </p>
+            </>
+          )}
           <button onClick={() => navigate("/login")}>Return to sign in</button>
         </div>
       ) : (
         <form className="auth-form" onSubmit={submit}>
           <label>
-            Username
-            <input name="username" autoComplete="username" required autoFocus />
-          </label>
-          <label>
-            Email <small>(optional)</small>
-            <input name="email" type="email" autoComplete="email" />
+            Email
+            <input name="email" type="email" autoComplete="email" required autoFocus />
           </label>
           <button className="primary" disabled={busy}>
             {busy ? "Creating Passkey…" : "Register Passkey"}

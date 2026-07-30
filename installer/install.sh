@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-RELEASE_VERSION="${WEBDEPLOY_VERSION:-v0.1.6}"
+RELEASE_VERSION="${WEBDEPLOY_VERSION:-v0.1.7}"
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 INSTALL_ROOT="/opt/webdeploy"
 DATA_DIR="/var/lib/webdeploy"
@@ -11,7 +11,6 @@ MCP_DOMAIN=""
 MCP_SERVER_NAME=""
 PUBLIC_PATH="/webdeploy"
 INTERNAL_PORT="3847"
-ADMIN_IDENTITY=""
 ACME_EMAIL=""
 CONFIGURE_NGINX="yes"
 CONFIGURE_HTTPS="yes"
@@ -27,8 +26,7 @@ Usage: sudo bash installer/install.sh [options]
 
 Quick install:
   DOMAIN                       Use one domain, existing Nginx when present,
-                               path /webdeploy, HTTPS, admin identity "admin",
-                               and auto-update
+                               path /webdeploy, HTTPS, and auto-update
 
 Advanced options:
   --domain HOSTNAME             Dashboard and MCP domain
@@ -39,7 +37,6 @@ Advanced options:
   --dashboard-domain HOSTNAME   Dashboard domain override
   --mcp-domain HOSTNAME         MCP domain override
   --port NUMBER
-  --admin IDENTITY
   --acme-email EMAIL
   --no-nginx
   --no-https
@@ -67,7 +64,7 @@ while (($#)); do
     --dashboard-domain) DASHBOARD_DOMAIN="$2"; shift 2 ;;
     --mcp-domain) MCP_DOMAIN="$2"; shift 2 ;;
     --port) INTERNAL_PORT="$2"; shift 2 ;;
-    --admin) ADMIN_IDENTITY="$2"; shift 2 ;;
+    --admin) echo "--admin is no longer needed; the first registered account becomes administrator."; shift 2 ;;
     --acme-email) ACME_EMAIL="$2"; shift 2 ;;
     --no-nginx) CONFIGURE_NGINX="no"; CONFIGURE_HTTPS="no"; shift ;;
     --no-https) CONFIGURE_HTTPS="no"; shift ;;
@@ -145,7 +142,6 @@ prompt_required DASHBOARD_DOMAIN "Public Dashboard domain"
 prompt MCP_DOMAIN "MCP domain" "${MCP_DOMAIN:-$DASHBOARD_DOMAIN}"
 prompt PUBLIC_PATH "Public URL path" "$PUBLIC_PATH"
 prompt INTERNAL_PORT "Internal control-plane port" "$INTERNAL_PORT"
-prompt ADMIN_IDENTITY "Initial administrator username or email" "${ADMIN_IDENTITY:-admin}"
 yesno CONFIGURE_NGINX "Configure Nginx" "$CONFIGURE_NGINX"
 if [[ "$CONFIGURE_NGINX" == yes ]]; then yesno CONFIGURE_HTTPS "Request HTTPS certificates" "$CONFIGURE_HTTPS"; fi
 if [[ "$CONFIGURE_HTTPS" == yes ]]; then prompt ACME_EMAIL "ACME email" "${ACME_EMAIL:-admin@$DASHBOARD_DOMAIN}"; fi
@@ -383,7 +379,6 @@ set -a
 source "$CONFIG_DIR/webdeploy.env"
 set +a
 (cd "$RELEASE_DIR"; node packages/core/dist/migrate-cli.js)
-BOOTSTRAP_ADMIN_IDENTITY="$ADMIN_IDENTITY" node "$RELEASE_DIR/installer/bootstrap.mjs"
 
 install -d -m 0755 /usr/local/libexec
 install -m 0755 "$RELEASE_DIR/installer/bin/webdeploy-control" /usr/local/libexec/webdeploy-control
@@ -520,9 +515,9 @@ Dashboard: $PUBLIC_URL/
 MCP endpoint: $MCP_PUBLIC_URL/mcp
 MCP name: $MCP_SERVER_NAME
 
-1. Open the Dashboard and register a Passkey for: $ADMIN_IDENTITY
-2. List requests:  sudo webdeploy auth list-pending
-3. Approve it:     sudo webdeploy auth approve-passkey <request-code>
+1. Open the Dashboard and register the first account; it becomes administrator automatically.
+2. Later requests can be approved in Dashboard > Administration.
+3. CLI approval:   sudo webdeploy auth approve-passkey <request-code>
 4. View MCP setup:  webdeploy mcp
 5. Save MCP setup:  webdeploy mcp --output mcp-install.txt
 

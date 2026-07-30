@@ -24,8 +24,11 @@ export function registerAdminRoutes(
   app.get("/api/admin/passkeys/pending", async (request) => {
     await admin(request);
     const pending = await database.query(
-      `SELECT r.id,r.request_code,r.created_at,r.expires_at,u.id AS user_id,u.username,u.email
-       FROM passkey_enrollment_requests r JOIN users u ON u.id=r.user_id
+      `SELECT r.id,r.request_code,r.created_at,r.expires_at,u.id AS user_id,u.email,
+              u.status AS user_status,p.name AS passkey_name
+       FROM passkey_enrollment_requests r
+       JOIN users u ON u.id=r.user_id
+       LEFT JOIN passkeys p ON p.enrollment_request_id=r.id
        WHERE r.status='pending' AND r.expires_at>now() ORDER BY r.created_at`,
     );
     return { pending: pending.rows };
@@ -54,6 +57,30 @@ export function registerAdminRoutes(
     await writeAudit(database, {
       actorUserId: session.actor.id,
       action: "passkey.enrollment.approved",
+      targetType: "passkey_enrollment",
+      targetId: enrollment.id,
+    });
+    return { ok: true };
+  });
+  app.post("/api/admin/passkeys/:requestCode/reject", async (request) => {
+    const session = await admin(request, true);
+    const requestCode = (request.params as any).requestCode;
+    const enrollment = (
+      await database.query(
+        `UPDATE passkey_enrollment_requests
+         SET status='rejected',reviewed_by=$2,reviewed_at=now()
+         WHERE request_code=$1 AND status='pending' AND expires_at>now()
+         RETURNING id,user_id`,
+        [requestCode, session.actor.id],
+      )
+    ).rows[0];
+    if (!enrollment) throw new AppError("REQUEST_NOT_FOUND", "Pending request not found", 404);
+    await database.query("UPDATE passkeys SET status='rejected' WHERE enrollment_request_id=$1", [
+      enrollment.id,
+    ]);
+    await writeAudit(database, {
+      actorUserId: session.actor.id,
+      action: "passkey.enrollment.rejected",
       targetType: "passkey_enrollment",
       targetId: enrollment.id,
     });

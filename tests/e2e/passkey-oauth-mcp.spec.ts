@@ -303,20 +303,25 @@ http.createServer((request, response) => {
   }
 }
 
-async function register(page: Page, username: string): Promise<string> {
+function accountEmail(identifier: string): string {
+  return identifier.includes("@") ? identifier : `${identifier}@example.test`;
+}
+
+async function register(page: Page, identifier: string): Promise<string | null> {
   await page.goto(publicPath("/register"));
-  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Email").fill(accountEmail(identifier));
   await page.getByRole("button", { name: "Register Passkey" }).click();
-  await expect(page.getByText("Passkey registered")).toBeVisible();
+  await expect(page.getByText(/Passkey registered|Administrator created/)).toBeVisible();
+  if (await page.getByText("Administrator created").isVisible()) return null;
   return (await page
     .getByText(/Request code:/)
     .locator("strong")
     .textContent())!;
 }
 
-async function login(page: Page, username: string) {
+async function login(page: Page, identifier: string) {
   await page.goto(publicPath("/login"));
-  await page.getByLabel("Username or email").fill(username);
+  await page.getByLabel("Email").fill(accountEmail(identifier));
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
 }
@@ -429,22 +434,41 @@ async function runCodex(args: string[]): Promise<string> {
   });
 }
 
-test("Passkey approval, authorization, OAuth PKCE, and MCP tools", async ({ browser, request }) => {
+test("First administrator, Passkey approval, OAuth PKCE, and MCP tools", async ({
+  browser,
+  request,
+}) => {
   const username = `admin-${Date.now()}`;
   const context = await browser.newContext();
   const page = await addVirtualPasskey(context);
   const requestCode = await register(page, username);
-
-  const pendingLogin = await request.post(publicPath("/api/auth/login/options"), {
-    data: { identifier: username },
-  });
-  expect(pendingLogin.status()).toBe(401);
-
-  cli("auth", "approve-passkey", requestCode);
+  expect(requestCode).toBeNull();
   const userList = cli("users", "list");
   expect(userList).toContain(username);
 
   await login(page, username);
+  const firstSession = await request.get(publicPath("/api/auth/session"), {
+    headers: {
+      cookie: (await page.context().cookies())
+        .map((cookie) => `${cookie.name}=${cookie.value}`)
+        .join("; "),
+    },
+  });
+  expect((await firstSession.json()).user.isAdmin).toBe(true);
+  const additionalContext = await browser.newContext();
+  const additionalPage = await addVirtualPasskey(additionalContext);
+  const additionalRequest = await register(additionalPage, username);
+  expect(additionalRequest).toBeTruthy();
+  await page.goto(publicPath("/admin"));
+  const approval = page
+    .locator(".approval-row")
+    .filter({ hasText: accountEmail(username) })
+    .filter({ hasText: "Additional Passkey" });
+  await expect(approval).toBeVisible();
+  await approval.getByRole("button", { name: "Approve" }).click();
+  await login(additionalPage, username);
+  await additionalContext.close();
+  await page.goto(publicPath("/"));
   await expect(page.getByRole("heading", { name: "Install WebDeploy MCP" })).toBeVisible();
   const mcpUrl = `${externalBaseUrl}/mcp`;
   const mcpName = deriveMcpServerName(externalBaseUrl);
@@ -614,7 +638,8 @@ test("an isolated Codex session can install, authenticate, and use the MCP serve
   const page = await addVirtualPasskey(context);
   const username = `e2e-codex-${Date.now()}`;
   const requestCode = await register(page, username);
-  cli("auth", "approve-passkey", requestCode);
+  expect(requestCode).toBeTruthy();
+  cli("auth", "approve-passkey", requestCode!);
   await login(page, username);
 
   const oauthLogin = await startCodexLogin();
@@ -647,7 +672,8 @@ test("rejected Passkeys cannot authenticate", async ({ browser, request }) => {
   const context = await browser.newContext();
   const page = await addVirtualPasskey(context);
   const requestCode = await register(page, username);
-  cli("auth", "reject-passkey", requestCode);
+  expect(requestCode).toBeTruthy();
+  cli("auth", "reject-passkey", requestCode!);
   const response = await request.post(publicPath("/api/auth/login/options"), {
     data: { identifier: username },
   });

@@ -2,6 +2,18 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.7] - 2026-07-30
+
+### Changed
+
+- Email is the single account and Passkey login identifier
+- The first completed Passkey enrollment becomes the initial administrator automatically
+- Existing accounts can enroll multiple Passkeys, each requiring administrator approval
+
+### Added
+
+- Dashboard approval and rejection controls for new users and additional Passkeys
+
 ## [0.1.6] - 2026-07-29
 
 ### Fixed

@@ -1,18 +1,18 @@
-# WebDeploy MCP v0.1.6
+# WebDeploy MCP v0.1.7
 
-This release fixes actionable Passkey login errors being hidden behind a generic HTTP 401.
+This release simplifies accounts and Passkey administration.
 
 ## Highlights
 
-- One command reuses an existing domain and Nginx virtual host.
-- Only `/webdeploy/` is added; the root website remains unchanged.
-- Dashboard, Passkeys, OAuth PKCE, MCP streaming, and Agent commands all use the public path.
-- Dashboard login shows the exact account or Passkey activation problem.
-- Control-plane API errors consistently use the documented error envelope.
+- Email is the only registration and login identifier.
+- The first completed Passkey enrollment becomes system administrator automatically.
+- Later user applications appear in Dashboard administration for approval or rejection.
+- An existing email account can bind multiple Passkeys.
+- Every additional Passkey requires Dashboard or CLI administrator approval.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.6.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.7.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

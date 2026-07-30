@@ -9,6 +9,7 @@ import {
   AppError,
   createMcpInstallCatalog,
   randomToken,
+  withTransaction,
   writeAudit,
   type Config,
   type Database,
@@ -31,32 +32,19 @@ export async function registerPasskeyRoutes(
     "/api/auth/register/options",
     { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
     async (request) => {
-      const body = request.body as { username?: string; email?: string };
-      const username = body.username?.trim();
-      const email = body.email?.trim().toLowerCase() || null;
-      if (!username || username.length > 80) {
-        throw new AppError("INVALID_USERNAME", "Username must contain 1 to 80 characters");
+      const body = request.body as { email?: string };
+      const email = body.email?.trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+        throw new AppError("INVALID_EMAIL", "Enter a valid email address");
       }
-      let user = (
-        await database.query(
-          `SELECT * FROM users WHERE lower(username)=lower($1)
-             OR ($2::text IS NOT NULL AND lower(email)=lower($2))`,
-          [username, email],
-        )
-      ).rows[0];
-      if (user?.status === "active") {
-        throw new AppError(
-          "ACCOUNT_EXISTS",
-          "Sign in before adding another passkey to an active account",
-          409,
-        );
-      }
+      let user = (await database.query("SELECT * FROM users WHERE lower(email)=lower($1)", [email]))
+        .rows[0];
       if (!user) {
         user = (
           await database.query(
             `INSERT INTO users(username,email,webauthn_user_id)
              VALUES($1,$2,$3) RETURNING *`,
-            [username, email, Buffer.from(randomToken(32), "base64url")],
+            [email, email, Buffer.from(randomToken(32), "base64url")],
           )
         ).rows[0];
       }
@@ -117,37 +105,68 @@ export async function registerPasskeyRoutes(
       }
       const info = verification.registrationInfo;
       const requestCode = `WDP-${randomToken(9).toUpperCase()}`;
-      const enrollment = await database.query(
-        `INSERT INTO passkey_enrollment_requests
-          (user_id,request_code,requested_ip,requested_user_agent,expires_at)
-         VALUES($1,$2,$3,$4,now()+interval '7 days') RETURNING id`,
-        [challenge.user_id, requestCode, request.ip, request.headers["user-agent"] ?? null],
-      );
-      await database.query(
-        `INSERT INTO passkeys
-          (user_id,enrollment_request_id,credential_id,public_key,counter,transports,
-           device_type,backed_up,status,name)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9)`,
-        [
-          challenge.user_id,
-          enrollment.rows[0].id,
-          info.credential.id,
-          Buffer.from(info.credential.publicKey),
-          info.credential.counter,
-          info.credential.transports ?? [],
-          info.credentialDeviceType,
-          info.credentialBackedUp,
-          body.name?.trim() || null,
-        ],
-      );
+      const result = await withTransaction(database, async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('webdeploy-first-admin'))");
+        const adminCount = await client.query(
+          "SELECT count(*)::int AS count FROM users WHERE is_admin=true AND status='active'",
+        );
+        const passkeyCount = await client.query("SELECT count(*)::int AS count FROM passkeys");
+        const firstAdministrator =
+          adminCount.rows[0].count === 0 && passkeyCount.rows[0].count === 0;
+        const enrollment = await client.query(
+          `INSERT INTO passkey_enrollment_requests
+           (user_id,request_code,requested_ip,requested_user_agent,expires_at,status,reviewed_at)
+           VALUES($1,$2,$3,$4,now()+interval '7 days',$5::passkey_status,
+             CASE WHEN $5::passkey_status='active'::passkey_status THEN now() ELSE NULL END)
+           RETURNING id`,
+          [
+            challenge.user_id,
+            requestCode,
+            request.ip,
+            request.headers["user-agent"] ?? null,
+            firstAdministrator ? "active" : "pending",
+          ],
+        );
+        await client.query(
+          `INSERT INTO passkeys
+            (user_id,enrollment_request_id,credential_id,public_key,counter,transports,
+             device_type,backed_up,status,name)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [
+            challenge.user_id,
+            enrollment.rows[0].id,
+            info.credential.id,
+            Buffer.from(info.credential.publicKey),
+            info.credential.counter,
+            info.credential.transports ?? [],
+            info.credentialDeviceType,
+            info.credentialBackedUp,
+            firstAdministrator ? "active" : "pending",
+            body.name?.trim() || null,
+          ],
+        );
+        if (firstAdministrator) {
+          await client.query(
+            `UPDATE users SET status='active',is_admin=true,approved_at=now(),updated_at=now()
+             WHERE id=$1`,
+            [challenge.user_id],
+          );
+        }
+        return { enrollmentId: enrollment.rows[0].id, firstAdministrator };
+      });
       await writeAudit(database, {
         actorUserId: challenge.user_id,
-        action: "passkey.enrollment.requested",
+        action: result.firstAdministrator
+          ? "passkey.enrollment.bootstrap_approved"
+          : "passkey.enrollment.requested",
         targetType: "passkey_enrollment",
-        targetId: enrollment.rows[0].id,
-        metadata: { requestCode },
+        targetId: result.enrollmentId,
+        metadata: { requestCode, firstAdministrator: result.firstAdministrator },
         ip: request.ip,
       });
+      if (result.firstAdministrator) {
+        return { status: "active", firstAdministrator: true };
+      }
       return {
         status: "pending",
         requestCode,
@@ -160,18 +179,17 @@ export async function registerPasskeyRoutes(
     "/api/auth/login/options",
     { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
     async (request) => {
-      const body = request.body as { identifier?: string };
-      const identifier = body.identifier?.trim();
-      if (!identifier) throw new AppError("IDENTIFIER_REQUIRED", "Username or email is required");
+      const body = request.body as { email?: string; identifier?: string };
+      const email = (body.email ?? body.identifier)?.trim().toLowerCase();
+      if (!email) throw new AppError("EMAIL_REQUIRED", "Email is required");
       const user = (
         await database.query(
           `SELECT * FROM users
-           WHERE (lower(username)=lower($1) OR lower(email)=lower($1)) AND status='active'`,
-          [identifier],
+           WHERE lower(email)=lower($1) AND status='active'`,
+          [email],
         )
       ).rows[0];
-      if (!user)
-        throw new AppError("LOGIN_FAILED", "No active account matches that identifier", 401);
+      if (!user) throw new AppError("LOGIN_FAILED", "No active account matches that email", 401);
       const passkeys = await database.query(
         "SELECT credential_id,transports FROM passkeys WHERE user_id=$1 AND status='active'",
         [user.id],

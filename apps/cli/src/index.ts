@@ -23,7 +23,7 @@ const database = createDatabase(config.DATABASE_URL);
 const program = new Command()
   .name("webdeploy")
   .description("Administer a local WebDeploy MCP installation")
-  .version("0.1.6");
+  .version("0.1.7");
 
 program
   .command("status")
@@ -320,21 +320,6 @@ async function reviewEnrollment(requestCode: string, approve: boolean): Promise<
       "UPDATE users SET status='active',approved_at=now(),updated_at=now() WHERE id=$1",
       [enrollment.user_id],
     );
-    const bootstrap = await database.query(
-      "SELECT value->>'identity' AS identity FROM system_settings WHERE key='bootstrap_admin'",
-    );
-    const user = await database.query("SELECT username,email FROM users WHERE id=$1", [
-      enrollment.user_id,
-    ]);
-    const identity = bootstrap.rows[0]?.identity?.toLowerCase();
-    if (
-      identity &&
-      [user.rows[0]?.username, user.rows[0]?.email].some(
-        (value) => value?.toLowerCase() === identity,
-      )
-    ) {
-      await database.query("UPDATE users SET is_admin=true WHERE id=$1", [enrollment.user_id]);
-    }
   }
   await audit(
     approve ? "passkey.enrollment.approved" : "passkey.enrollment.rejected",
