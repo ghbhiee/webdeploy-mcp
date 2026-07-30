@@ -302,6 +302,7 @@ fi
 
 install -d -m 0755 "$INSTALL_ROOT/releases" "$DATA_DIR"
 install -d -m 0700 "$CONFIG_DIR" "$DATA_DIR/uploads" "$DATA_DIR/pm2"
+install -d -m 0755 "$DATA_DIR/pages"
 [[ ! -e "$RELEASE_DIR" ]] || { echo "Release already installed: $RELEASE_DIR" >&2; exit 1; }
 mkdir "$RELEASE_DIR"
 created_release=yes

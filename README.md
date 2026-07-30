@@ -7,12 +7,13 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.8 supports one-command installation under `/webdeploy` on an existing
-> domain and Nginx virtual host.
+> **Release status:** v0.1.9 adds the built-in token-authenticated Pages service and retries
+> deployments that race the system user database lock.
 
 ## What it provides
 
 - Git, ZIP/TAR, and small inline-file deployments
+- A built-in Pages service: one directory per site, published with a token, no project required
 - Custom install, build, output, start, health-check, and runtime settings
 - Per-project Linux service users and isolated release directories
 - Atomic static-site symlinks and health-checked dynamic blue/green activation
@@ -229,8 +230,47 @@ not present. Client-specific troubleshooting is covered in [MCP clients](docs/mc
 | `get_project_settings_url` | Passkey-protected Dashboard URL            |
 | `set_custom_domain`        | Configure the primary hostname             |
 | `delete_project`           | Queue project removal                      |
+| `create_page_site`         | Create a Pages directory + publish token   |
+| `list_page_sites`          | List Pages sites and public URLs           |
+| `publish_page`             | Publish static files to a Pages site       |
+| `rotate_page_token`        | Replace a Pages publish token              |
+| `delete_page_site`         | Delete a Pages site and its files          |
 
 MCP intentionally has no tool that accepts or returns environment values.
+
+## Built-in static Pages
+
+Full projects are the right tool for real sites, but they create a Linux user, releases, and
+Nginx state per site. For one-off static pages — reports, demos, artifacts an agent just
+generated — the control plane ships a shared Pages service instead:
+
+- Every site is one directory below `DATA_DIR/pages/` and is served publicly at
+  `PUBLIC_URL/pages/<slug>/` through the existing reverse proxy. No per-site Nginx or
+  certificate work.
+- Each MCP account gets a default site on first `publish_page`; additional named sites are
+  created with `create_page_site`. Owners and administrators see their sites with
+  `list_page_sites`.
+- Every site has a publish token (returned once at creation). The token authenticates a plain
+  HTTP API, so CI jobs or other agents can publish without OAuth:
+
+```bash
+# Replace the whole site with one HTML file
+curl -X POST "$PUBLIC_URL/api/pages/publish" \
+  -H "Authorization: Bearer $PAGES_TOKEN" -H "Content-Type: application/json" \
+  -d '{"clean":true,"files":[{"path":"index.html","content":"<h1>hello</h1>"}]}'
+
+# Upload or overwrite a single file with a raw body
+curl -X PUT "$PUBLIC_URL/api/pages/files/report/index.html" \
+  -H "Authorization: Bearer $PAGES_TOKEN" --data-binary @report.html
+
+# Inspect the site the token belongs to
+curl "$PUBLIC_URL/api/pages/site" -H "Authorization: Bearer $PAGES_TOKEN"
+```
+
+`publish_page` merges files into the site by default; pass `clean: true` to atomically replace
+the whole directory. Tokens are stored hashed, can be rotated with `rotate_page_token`, and die
+with the site on `delete_page_site`. Published pages are served without the dashboard's
+Content-Security-Policy so inline scripts and styles work.
 
 ## Administration
 
@@ -336,10 +376,13 @@ browser tests, and shell syntax checks on Ubuntu.
 - **Certificate failure:** confirm DNS and inbound 80/443, then run the printed `certbot --nginx` command.
 - **Private Git:** use an SSH URL and install a read-only deploy key for the project's isolated Linux
   user. Never put credentials in a Git URL.
+- **`useradd: cannot lock /etc/passwd`:** the worker retries this automatically. If it still fails,
+  another package manager run is holding the lock, or a crashed process left a stale
+  `/etc/passwd.lock`, `/etc/shadow.lock`, `/etc/group.lock`, or `/etc/gshadow.lock` file.
 
 See [Deployment and operations](docs/deployment.md) for details.
 
-## Known limitations in v0.1.8
+## Known limitations in v0.1.9
 
 - Linux deployment execution is supported only on the listed Ubuntu/Debian versions.
 - Private Git key enrollment is an administrator-run server step; the Dashboard does not upload

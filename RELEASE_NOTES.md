@@ -1,18 +1,21 @@
-# WebDeploy MCP v0.1.8
+# WebDeploy MCP v0.1.9
 
-This release simplifies accounts and Passkey administration.
+This release adds the built-in Pages service and hardens deployments against system lock
+contention.
 
 ## Highlights
 
-- Email is the only registration and login identifier.
-- The first completed Passkey enrollment becomes system administrator automatically.
-- Later user applications appear in Dashboard administration for approval or rejection.
-- An existing email account can bind multiple Passkeys.
-- Every additional Passkey requires Dashboard or CLI administrator approval.
+- One-off static pages no longer need a project: `publish_page` writes files into a per-account
+  directory served at `PUBLIC_URL/pages/<slug>/`.
+- Each Pages site has a publish token for a plain HTTP API (`/api/pages/publish`,
+  `/api/pages/files/*`), so CI jobs and other agents can publish without OAuth.
+- Tokens are stored hashed, are shown only once, and can be rotated or deleted with the site.
+- `useradd`/`userdel` now retry when apt, unattended-upgrades, or cloud-init holds the
+  `/etc/passwd` lock, instead of failing the deployment immediately.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.8.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.9.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

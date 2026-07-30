@@ -20,7 +20,7 @@ import {
   type Database,
 } from "@webdeploy/core";
 import { assertSafeArchiveEntry, projectProcessName, safeChild } from "./paths.js";
-import { runAsUser, runCommand } from "./command.js";
+import { runAsUser, runCommand, runUserDatabaseCommand } from "./command.js";
 import { activateNginxConfig, removeNginxConfig, renderNginxProject } from "./nginx.js";
 import { restartReleaseProcess, startReleaseProcess, stopReleaseProcess } from "./pm2.js";
 
@@ -307,7 +307,7 @@ export class Deployer {
         () => false,
       );
       if (!exists) {
-        await runCommand("useradd", [
+        await runUserDatabaseCommand("useradd", [
           "--system",
           "--user-group",
           "--home-dir",
@@ -577,7 +577,7 @@ export class Deployer {
     const projectRoot = safeChild(this.config.DATA_DIR, "projects", project.id);
     if (existsSync(projectRoot)) await rm(projectRoot, { recursive: true, force: true });
     if (project.os_user) {
-      await runCommand("userdel", [project.os_user]).catch(() => undefined);
+      await runUserDatabaseCommand("userdel", [project.os_user]).catch(() => undefined);
     }
     await this.database.query("DELETE FROM projects WHERE id=$1", [project.id]);
   }

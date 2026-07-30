@@ -2,6 +2,24 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.9] - 2026-07-30
+
+### Added
+
+- Built-in Pages service: per-account static directories under `DATA_DIR/pages/`, served publicly
+  at `PUBLIC_URL/pages/<slug>/` with no per-site project, Linux user, or Nginx configuration
+- MCP tools `create_page_site`, `list_page_sites`, `publish_page`, `rotate_page_token`, and
+  `delete_page_site`; `publish_page` uses or creates the account's default site automatically
+- Token-authenticated Pages HTTP API (`/api/pages/publish`, `/api/pages/files/*`,
+  `/api/pages/site`) for publishing from any HTTP client without OAuth; tokens are stored hashed
+  and can be rotated
+
+### Fixed
+
+- Deployments no longer fail with `useradd: cannot lock /etc/passwd` when apt,
+  unattended-upgrades, cloud-init, or another process briefly holds the system user database
+  lock; the worker retries user creation and removal with backoff and reports stale lock files
+
 ## [0.1.8] - 2026-07-30
 
 ### Fixed

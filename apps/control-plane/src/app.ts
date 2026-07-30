@@ -10,6 +10,7 @@ import fastifyStatic from "@fastify/static";
 import {
   AppError,
   DeploymentService,
+  PageService,
   ProjectService,
   createDatabase,
   loadConfig,
@@ -19,6 +20,7 @@ import {
 import { registerPasskeyRoutes } from "./passkeys.js";
 import { createOAuthRuntime } from "./oauth.js";
 import { registerMcpRoute } from "./mcp.js";
+import { registerPagesRoutes } from "./pages-routes.js";
 import { registerProjectRoutes } from "./project-routes.js";
 import { registerAdminRoutes } from "./admin-routes.js";
 
@@ -46,6 +48,7 @@ export async function buildApp(config: Config = loadConfig()) {
   const masterKey = loadMasterKey(config.MASTER_KEY_FILE);
   const projects = new ProjectService(database, masterKey, config.RELEASE_RETENTION_DEFAULT);
   const deployments = new DeploymentService(database, projects);
+  const pages = new PageService(database, config.DATA_DIR);
 
   await app.register(cookie);
   await app.register(formbody);
@@ -94,14 +97,15 @@ export async function buildApp(config: Config = loadConfig()) {
 
   app.get("/healthz", async () => {
     await database.query("SELECT 1");
-    return { status: "ok", version: "0.1.8" };
+    return { status: "ok", version: "0.1.9" };
   });
 
   await registerPasskeyRoutes(app, { database, config });
   registerProjectRoutes(app, { database, config, projects, deployments });
+  await registerPagesRoutes(app, { config, pages });
   registerAdminRoutes(app, database, config);
   const oauth = await createOAuthRuntime(app, database, config);
-  registerMcpRoute(app, { database, config, projects, deployments, oauth });
+  registerMcpRoute(app, { database, config, projects, deployments, pages, oauth });
 
   const dashboardRoot =
     process.env.DASHBOARD_DIST ?? resolve(process.cwd(), "apps", "dashboard", "dist");

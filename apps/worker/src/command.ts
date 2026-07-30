@@ -65,6 +65,48 @@ export async function runCommand(
   });
 }
 
+// useradd/userdel serialize on the shadow-suite lock files (/etc/passwd.lock,
+// /etc/.pwd.lock, ...). apt, unattended-upgrades, cloud-init, or a concurrent
+// useradd can hold them briefly, and shadow-utils fails immediately instead of
+// waiting, so treat lock contention as retryable.
+const USER_DATABASE_LOCK_PATTERN =
+  /cannot lock \/etc\/(?:passwd|shadow|group|gshadow|subuid|subgid)|existing lock file|lock file already in use|try again later/i;
+
+export function isUserDatabaseLockError(error: unknown): boolean {
+  const stderr = typeof (error as any)?.stderr === "string" ? (error as any).stderr : "";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return USER_DATABASE_LOCK_PATTERN.test(stderr) || USER_DATABASE_LOCK_PATTERN.test(message);
+}
+
+export async function runUserDatabaseCommand(
+  executable: string,
+  args: string[],
+  options: Parameters<typeof runCommand>[2] & { maxAttempts?: number; retryDelayMs?: number } = {},
+): Promise<CommandResult> {
+  const { maxAttempts = 10, retryDelayMs = 500, ...commandOptions } = options;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await runCommand(executable, args, commandOptions);
+    } catch (error) {
+      lastError = error;
+      if (!isUserDatabaseLockError(error) || attempt === maxAttempts) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(retryDelayMs * attempt, 5_000)));
+    }
+  }
+  if (isUserDatabaseLockError(lastError)) {
+    const detail = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(
+      `${executable} could not lock the system user database after ${maxAttempts} attempts. ` +
+        "Another process (apt, unattended-upgrades, cloud-init, or another useradd) is holding " +
+        "/etc/passwd or /etc/shadow, or a crashed process left a stale lock file " +
+        "(/etc/passwd.lock, /etc/shadow.lock, /etc/group.lock, /etc/gshadow.lock). " +
+        `Last error: ${detail}`,
+    );
+  }
+  throw lastError;
+}
+
 export async function runAsUser(
   user: string,
   command: string,

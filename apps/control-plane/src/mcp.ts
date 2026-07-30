@@ -5,7 +5,9 @@ import { z } from "zod";
 import {
   AppError,
   DeploymentService,
+  PageService,
   ProjectService,
+  pageSitePublicUrl,
   type Config,
   type Database,
 } from "@webdeploy/core";
@@ -18,6 +20,7 @@ export function registerMcpRoute(
     config: Config;
     projects: ProjectService;
     deployments: DeploymentService;
+    pages: PageService;
     oauth: OAuthRuntime;
   },
 ): void {
@@ -49,15 +52,16 @@ function createMcpServer(
     config: Config;
     projects: ProjectService;
     deployments: DeploymentService;
+    pages: PageService;
   },
   actor: any,
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.8" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.9" },
     {
       instructions:
-        "Use get_project before mutating a project. Deployment tools never accept environment variable values. Direct users to the returned settingsUrl for secrets and advanced configuration. Confirm before delete_project or rollback_release.",
+        "Use get_project before mutating a project. Deployment tools never accept environment variable values. Direct users to the returned settingsUrl for secrets and advanced configuration. Confirm before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
     },
   );
   const read = () => requireScope(scopes, "platform:read");
@@ -79,7 +83,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.8", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.9", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },
@@ -356,6 +360,128 @@ function createMcpServer(
       }
       const operationId = await dependencies.projects.queueDelete(actor, projectId);
       return result({ operationId, status: "queued" }, `Deletion ${operationId} was queued.`);
+    },
+  );
+
+  const siteSummary = (site: { slug: string; name: string; publishedAt: Date | null }) => ({
+    slug: site.slug,
+    name: site.name,
+    publishedAt: site.publishedAt,
+    publicUrl: pageSitePublicUrl(dependencies.config.PUBLIC_URL, site.slug),
+  });
+  const pagesApiUrl = `${dependencies.config.PUBLIC_URL.replace(/\/+$/, "")}/api/pages`;
+
+  server.registerTool(
+    "create_page_site",
+    {
+      title: "Create a Pages site",
+      description:
+        "Create a directory on the built-in static Pages service. Returns the public URL and a publish token (shown only once) for the token HTTP API.",
+      inputSchema: z.object({ name: z.string().min(1).max(120).optional() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ name }) => {
+      projectWrite();
+      const { site, token } = await dependencies.pages.createSite(actor, { name });
+      const summary = siteSummary(site);
+      return result(
+        { site: summary, publishToken: token, publishApiUrl: pagesApiUrl },
+        `Created Pages site ${site.slug} at ${summary.publicUrl}. Store the publish token now; it is not shown again.`,
+      );
+    },
+  );
+
+  server.registerTool(
+    "list_page_sites",
+    {
+      title: "List Pages sites",
+      description: "List built-in static Pages sites accessible to the authenticated user.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async () => {
+      read();
+      const sites = await dependencies.pages.listSites(actor);
+      return result({ sites: sites.map(siteSummary) }, `Found ${sites.length} Pages sites.`);
+    },
+  );
+
+  server.registerTool(
+    "publish_page",
+    {
+      title: "Publish static page files",
+      description:
+        "Publish small static files to the built-in Pages service without creating a project. Omit siteSlug to use (or create) this account's default site. Set clean=true to replace the whole site.",
+      inputSchema: z.object({
+        siteSlug: z.string().min(1).max(48).optional(),
+        files: z
+          .array(
+            z.object({
+              path: z.string().min(1),
+              content: z.string(),
+              encoding: z.enum(["utf8", "base64"]).default("utf8"),
+            }),
+          )
+          .min(1)
+          .max(100),
+        clean: z.boolean().default(false),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ siteSlug, files, clean }) => {
+      deploymentWrite();
+      const target = siteSlug
+        ? { site: await dependencies.pages.getSite(actor, siteSlug), token: undefined }
+        : await dependencies.pages.defaultSite(actor);
+      const published = await dependencies.pages.publishFiles(target.site, files, { clean });
+      const summary = siteSummary(target.site);
+      return result(
+        {
+          site: summary,
+          ...published,
+          ...(target.token ? { publishToken: target.token, publishApiUrl: pagesApiUrl } : {}),
+        },
+        `Published ${published.fileCount} files to ${summary.publicUrl}` +
+          (target.token
+            ? ". A default Pages site was created; store the publish token now, it is not shown again."
+            : "."),
+      );
+    },
+  );
+
+  server.registerTool(
+    "rotate_page_token",
+    {
+      title: "Rotate a Pages publish token",
+      description: "Invalidate the current publish token of a Pages site and return a new one.",
+      inputSchema: z.object({ siteSlug: z.string().min(1).max(48) }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ siteSlug }) => {
+      projectWrite();
+      const { site, token } = await dependencies.pages.rotateToken(actor, siteSlug);
+      return result(
+        { site: siteSummary(site), publishToken: token, publishApiUrl: pagesApiUrl },
+        `Rotated the publish token for ${site.slug}. Store it now; it is not shown again.`,
+      );
+    },
+  );
+
+  server.registerTool(
+    "delete_page_site",
+    {
+      title: "Delete a Pages site",
+      description: "Delete a Pages site, its publish token, and all of its published files.",
+      inputSchema: z.object({ siteSlug: z.string().min(1).max(48), confirmSlug: z.string().min(1) }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    },
+    async ({ siteSlug, confirmSlug }) => {
+      projectWrite();
+      if (confirmSlug !== siteSlug) {
+        throw new AppError("CONFIRMATION_MISMATCH", "confirmSlug must exactly match siteSlug");
+      }
+      await dependencies.pages.deleteSite(actor, siteSlug);
+      return result({ deleted: siteSlug }, `Deleted Pages site ${siteSlug}.`);
     },
   );
 

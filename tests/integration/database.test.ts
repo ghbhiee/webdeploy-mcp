@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   AppError,
+  PageService,
   ProjectService,
   createDatabase,
   migrate,
@@ -41,7 +45,7 @@ describeDatabase("PostgreSQL schema", () => {
 
   it("records migrations by full file name and remains idempotent", async () => {
     const versions = await database.query("SELECT version FROM schema_migrations ORDER BY version");
-    expect(versions.rows).toEqual([{ version: "001_initial" }]);
+    expect(versions.rows).toEqual([{ version: "001_initial" }, { version: "002_pages" }]);
   });
 
   it("allocates only one row per port", async () => {
@@ -98,5 +102,67 @@ describeDatabase("PostgreSQL schema", () => {
       }),
     ]);
     expect(JSON.stringify(metadata)).not.toContain("integration-secret-value");
+  });
+
+  it("runs the Pages site lifecycle with hashed tokens and safe directories", async () => {
+    const user = (
+      await database.query(
+        `INSERT INTO users(username,webauthn_user_id,status)
+         VALUES($1,$2,'active') RETURNING id,username`,
+        [`pages-${randomUUID()}`, Buffer.from(randomUUID())],
+      )
+    ).rows[0];
+    const owner: Actor = { id: user.id, username: user.username, isAdmin: false, status: "active" };
+    const stranger: Actor = { ...owner, id: randomUUID(), username: "stranger" };
+    const pages = new PageService(database, mkdtempSync(join(tmpdir(), "wdp-pages-")));
+
+    const created = await pages.createSite(owner, { name: "Demo Site" });
+    expect(created.token).toMatch(/^wdp_/);
+    expect(created.site.slug).toMatch(/^demo-site/);
+    const stored = await database.query("SELECT token_hash FROM page_sites WHERE id=$1", [
+      created.site.id,
+    ]);
+    expect(stored.rows[0].token_hash).not.toContain(created.token);
+
+    await expect(pages.authenticateToken(created.token)).resolves.toMatchObject({
+      id: created.site.id,
+    });
+    await expect(pages.authenticateToken("wdp_wrong")).rejects.toMatchObject<AppError>({
+      code: "PAGES_TOKEN_INVALID",
+    });
+    await expect(pages.getSite(stranger, created.site.slug)).rejects.toMatchObject<AppError>({
+      code: "PROJECT_ACCESS_DENIED",
+    });
+
+    await pages.publishFiles(created.site, [
+      { path: "index.html", content: "<h1>one</h1>" },
+      { path: "assets/app.js", content: "Y29uc29sZQ==", encoding: "base64" },
+    ]);
+    const siteRoot = pages.siteRoot(created.site.slug);
+    expect(readFileSync(join(siteRoot, "index.html"), "utf8")).toContain("one");
+    await pages.publishFiles(created.site, [{ path: "only.html", content: "two" }], {
+      clean: true,
+    });
+    expect(existsSync(join(siteRoot, "index.html"))).toBe(false);
+    expect(readFileSync(join(siteRoot, "only.html"), "utf8")).toBe("two");
+    await expect(
+      pages.publishFiles(created.site, [{ path: "../escape.html", content: "x" }]),
+    ).rejects.toMatchObject<AppError>({ code: "INVALID_PAGE_PATH" });
+
+    const { site: defaulted } = await pages.defaultSite(owner);
+    expect(defaulted.id).toBe(created.site.id);
+    const rotated = await pages.rotateToken(owner, created.site.slug);
+    await expect(pages.authenticateToken(created.token)).rejects.toMatchObject<AppError>({
+      code: "PAGES_TOKEN_INVALID",
+    });
+    await expect(pages.authenticateToken(rotated.token)).resolves.toMatchObject({
+      id: created.site.id,
+    });
+
+    await pages.deleteSite(owner, created.site.slug);
+    expect(existsSync(siteRoot)).toBe(false);
+    await expect(pages.getSite(owner, created.site.slug)).rejects.toMatchObject<AppError>({
+      code: "NOT_FOUND",
+    });
   });
 });
