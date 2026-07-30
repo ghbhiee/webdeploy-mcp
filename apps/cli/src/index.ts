@@ -23,7 +23,7 @@ const database = createDatabase(config.DATABASE_URL);
 const program = new Command()
   .name("webdeploy")
   .description("Administer a local WebDeploy MCP installation")
-  .version("0.1.9");
+  .version("0.1.10");
 
 program
   .command("status")

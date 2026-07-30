@@ -2,6 +2,14 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.10] - 2026-07-30
+
+### Fixed
+
+- OAuth no longer rejects Claude Code with `invalid_client: client is not allowed`: client
+  metadata documents may declare loopback `http://localhost` / `http://127.0.0.1` / `http://[::1]`
+  redirect URIs (RFC 8252 native apps); all other plain-HTTP redirects remain rejected
+
 ## [0.1.9] - 2026-07-30
 
 ### Added

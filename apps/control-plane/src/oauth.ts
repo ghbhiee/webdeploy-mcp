@@ -68,7 +68,8 @@ export async function createOAuthRuntime(
         allowFetch: async (_ctx: any, clientId: string) => isSafePublicHttpsUrl(clientId),
         allowClient: async (_ctx: any, client: any) =>
           Array.isArray(client.redirectUris) &&
-          client.redirectUris.every((value: string) => value.startsWith("https://")),
+          client.redirectUris.length > 0 &&
+          client.redirectUris.every(isAllowedClientRedirectUri),
       },
       devInteractions: { enabled: false },
       registration: {
@@ -371,6 +372,21 @@ function loadJwks(config: Config): any {
   mkdirSync(dirname(config.OIDC_JWKS_FILE), { recursive: true });
   writeFileSync(config.OIDC_JWKS_FILE, JSON.stringify(keys, null, 2), { mode: 0o600 });
   return keys;
+}
+
+// Native MCP clients such as Claude Code publish loopback redirect URIs
+// (RFC 8252 section 7.3) in their client metadata document; rejecting plain
+// http there must not reject the loopback interface itself.
+export function isAllowedClientRedirectUri(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:") return true;
+    if (url.protocol !== "http:") return false;
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
 }
 
 function isSafePublicHttpsUrl(value: string): boolean {
