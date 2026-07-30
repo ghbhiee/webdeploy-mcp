@@ -15,7 +15,7 @@ and public URLs are installation settings.
 - Git, ZIP/TAR, and small inline-file deployments
 - A built-in Pages service: one directory per site, published with a token, no project required
 - Custom install, build, output, start, health-check, and runtime settings
-- Per-project Linux service users and isolated release directories
+- Per-project Linux service users with SSH fully denied (shell, SFTP, and port forwarding)
 - Atomic static-site symlinks and health-checked dynamic blue/green activation
 - PM2 process management, Nginx routing, and optional Certbot HTTPS
 - PostgreSQL-backed jobs, releases, audit events, OAuth state, and encrypted settings

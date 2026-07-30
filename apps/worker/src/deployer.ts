@@ -21,6 +21,11 @@ import {
 } from "@webdeploy/core";
 import { assertSafeArchiveEntry, projectProcessName, safeChild } from "./paths.js";
 import { runAsUser, runCommand, runUserDatabaseCommand } from "./command.js";
+import {
+  PROJECT_USERS_GROUP,
+  ensureProjectUsersGroup,
+  ensureUserInProjectsGroup,
+} from "./hardening.js";
 import { activateNginxConfig, removeNginxConfig, renderNginxProject } from "./nginx.js";
 import { restartReleaseProcess, startReleaseProcess, stopReleaseProcess } from "./pm2.js";
 
@@ -307,9 +312,12 @@ export class Deployer {
         () => false,
       );
       if (!exists) {
+        await ensureProjectUsersGroup();
         await runUserDatabaseCommand("useradd", [
           "--system",
           "--user-group",
+          "--groups",
+          PROJECT_USERS_GROUP,
           "--home-dir",
           projectRoot,
           "--shell",
@@ -321,6 +329,8 @@ export class Deployer {
       await chmod(projectRoot, 0o750);
       await this.database.query("UPDATE projects SET os_user=$2 WHERE id=$1", [project.id, osUser]);
     }
+    // Users created by earlier releases predate the SSH deny group.
+    await ensureUserInProjectsGroup(osUser);
     return { osUser, projectRoot };
   }
 

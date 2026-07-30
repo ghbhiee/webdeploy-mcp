@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Database } from "./db.js";
@@ -101,6 +101,12 @@ export class PageService {
   ) {
     this.pagesRoot = resolve(dataDir, "pages");
     mkdirSync(this.pagesRoot, { recursive: true });
+    // A crash during a clean publish can leave swap directories behind.
+    for (const entry of readdirSync(this.pagesRoot)) {
+      if (entry.startsWith(".staging-") || entry.startsWith(".trash-")) {
+        rmSync(resolve(this.pagesRoot, entry), { recursive: true, force: true });
+      }
+    }
   }
 
   siteRoot(slug: string): string {

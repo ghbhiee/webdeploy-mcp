@@ -14,8 +14,19 @@ All notable changes follow semantic versioning.
   `/api/pages/site`) for publishing from any HTTP client without OAuth; tokens are stored hashed
   and can be rotated
 
+### Security
+
+- Project Unix users are added to a `webdeploy-projects` group that the worker denies in `sshd`
+  through a validated `/etc/ssh/sshd_config.d` drop-in, blocking SFTP and port forwarding that a
+  `nologin` shell alone does not prevent; existing users are retrofitted on worker start
+
 ### Fixed
 
+- Interrupted deployments no longer stay stuck after a worker crash or reboot: stale job locks
+  are released on startup, repeatedly interrupted deployments are marked failed, and leftover
+  Pages swap directories are cleaned up
+- `webdeploy doctor` reports stale `/etc/passwd.lock`-style files, and `webdeploy pages list`
+  shows built-in Pages sites
 - Deployments no longer fail with `useradd: cannot lock /etc/passwd` when apt,
   unattended-upgrades, cloud-init, or another process briefly holds the system user database
   lock; the worker retries user creation and removal with backoff and reports stale lock files

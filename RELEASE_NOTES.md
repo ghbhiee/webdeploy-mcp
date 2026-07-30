@@ -12,6 +12,11 @@ contention.
 - Tokens are stored hashed, are shown only once, and can be rotated or deleted with the site.
 - `useradd`/`userdel` now retry when apt, unattended-upgrades, or cloud-init holds the
   `/etc/passwd` lock, instead of failing the deployment immediately.
+- Project Unix users are denied SSH entirely (shell, SFTP, and port forwarding) through a
+  `DenyGroups` drop-in that is validated with `sshd -t` before activation; existing users are
+  retrofitted automatically on upgrade.
+- Worker restarts release stale job locks and fail repeatedly interrupted deployments instead of
+  leaving them stuck; `webdeploy doctor` flags stale user-database lock files.
 
 ## Release assets
 

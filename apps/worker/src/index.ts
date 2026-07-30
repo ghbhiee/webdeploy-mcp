@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import { createDatabase, loadConfig, loadMasterKey } from "@webdeploy/core";
 import { Deployer } from "./deployer.js";
+import { enforceSshLockdown } from "./hardening.js";
 
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
@@ -15,6 +16,8 @@ process.on("SIGTERM", () => {
   stopping = true;
 });
 
+await recoverInterruptedWork().catch((error) => console.error("Job recovery failed", error));
+await enforceSshLockdown(database).catch((error) => console.error("SSH lockdown failed", error));
 await deployer
   .reconcileActiveProjects()
   .catch((error) => console.error("Reconciliation failed", error));
@@ -34,6 +37,31 @@ while (!stopping) {
 }
 
 await database.end();
+
+// This is a single-worker deployment, so any lock still present at startup
+// belongs to a crashed or restarted process and can be released. Jobs that
+// were interrupted three times are abandoned instead of crash-looping.
+async function recoverInterruptedWork(): Promise<void> {
+  await database.query(
+    "UPDATE deployment_jobs SET locked_at=NULL,locked_by=NULL WHERE locked_at IS NOT NULL",
+  );
+  await database.query(
+    `UPDATE project_operations SET locked_at=NULL,locked_by=NULL,status='queued'
+     WHERE locked_at IS NOT NULL AND status IN ('queued','running')`,
+  );
+  const abandoned = await database.query(
+    "DELETE FROM deployment_jobs WHERE attempts>=3 RETURNING deployment_id",
+  );
+  if (abandoned.rowCount) {
+    await database.query(
+      `UPDATE deployments SET status='failed',error_code='DEPLOYMENT_INTERRUPTED',
+        error_message='The deployment was interrupted repeatedly and will not be retried',
+        finished_at=now()
+       WHERE id = ANY($1) AND status NOT IN ('succeeded','failed','cancelled')`,
+      [abandoned.rows.map((row) => row.deployment_id)],
+    );
+  }
+}
 
 async function claimJob(): Promise<{ type: "deployment" | "operation"; targetId: string } | null> {
   const client = await database.connect();

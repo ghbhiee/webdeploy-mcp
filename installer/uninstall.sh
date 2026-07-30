@@ -37,6 +37,13 @@ if [[ -n "${NGINX_VHOST_FILE:-}" && -f "$INSTALL_ROOT/current/installer/configur
 fi
 rm -f /etc/nginx/conf.d/webdeploy-control.conf /usr/local/bin/webdeploy \
   /usr/local/libexec/webdeploy-control "${NGINX_SNIPPET_FILE:-/etc/nginx/snippets/webdeploy-control.conf}"
+if [[ -f /etc/ssh/sshd_config.d/60-webdeploy-projects.conf ]]; then
+  rm -f /etc/ssh/sshd_config.d/60-webdeploy-projects.conf
+  if command -v sshd >/dev/null 2>&1 && sshd -t 2>/dev/null; then
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+  fi
+fi
+groupdel webdeploy-projects 2>/dev/null || true
 if nginx -t; then
   systemctl reload nginx
 fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { loadEnvFile } from "node:process";
 import { resolve } from "node:path";
@@ -98,6 +98,24 @@ program
       status: existsSync(config.MASTER_KEY_FILE) ? "ok" : "missing",
     });
     rows.push({ check: "OIDC JWKS", status: existsSync(config.OIDC_JWKS_FILE) ? "ok" : "missing" });
+    // useradd fails while these exist; a lock older than a few minutes almost
+    // always belongs to a crashed process rather than a running one.
+    const staleLocks = [
+      "/etc/passwd.lock",
+      "/etc/shadow.lock",
+      "/etc/group.lock",
+      "/etc/gshadow.lock",
+    ].filter((path) => {
+      try {
+        return Date.now() - statSync(path).mtimeMs > 300_000;
+      } catch {
+        return false;
+      }
+    });
+    rows.push({
+      check: "user database locks",
+      status: staleLocks.length ? `stale: ${staleLocks.join(", ")}` : "ok",
+    });
     rows.push({
       check: "database",
       status: (await database.query("SELECT 1")).rowCount ? "ok" : "failed",
@@ -248,6 +266,15 @@ projects.command("restart <project-id>").action(async (projectId) => {
     [projectId, owner.rows[0].owner_id],
   );
   console.log(`Queued restart ${operation.rows[0].id}.`);
+});
+
+const pages = program.command("pages").description("Inspect built-in Pages sites");
+pages.command("list").action(async () => {
+  const result = await database.query(
+    `SELECT s.slug,s.name,u.username AS owner,s.published_at,s.created_at
+     FROM page_sites s JOIN users u ON u.id=s.owner_id ORDER BY s.created_at`,
+  );
+  printRows(result.rows);
 });
 
 program

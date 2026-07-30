@@ -24,6 +24,12 @@ fix and release are available.
 - Do not share Unix users between untrusted projects.
 - Review Nginx changes and deployment logs; rotate webhook secrets after suspected disclosure.
 
+Project Unix users are created with a `nologin` shell, no password, and membership in the
+`webdeploy-projects` group, which the worker denies in `sshd` via a validated
+`/etc/ssh/sshd_config.d` drop-in. This blocks SSH entirely — including SFTP and port
+forwarding, which a `nologin` shell alone does not prevent even if a build script plants an
+`authorized_keys` file. The drop-in is only activated after `sshd -t` succeeds.
+
 The worker intentionally runs as root because it manages project Unix users and Nginx. Its input
 is constrained to typed jobs, safe path resolution, validated archive entries, isolated project
 users, loopback ports, candidate health checks, and `nginx -t` before reload. This reduces risk but
