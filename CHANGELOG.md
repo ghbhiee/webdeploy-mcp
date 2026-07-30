@@ -2,6 +2,14 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.11] - 2026-07-30
+
+### Fixed
+
+- Authorization requests from loopback native clients (Claude Code) no longer fail with
+  `invalid_redirect_uri`: redirect URIs on loopback interfaces are matched with the port
+  ignored per RFC 8252 section 7.3, since native clients bind an ephemeral port at runtime
+
 ## [0.1.10] - 2026-07-30
 
 ### Fixed

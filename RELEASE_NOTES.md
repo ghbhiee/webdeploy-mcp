@@ -1,13 +1,13 @@
-# WebDeploy MCP v0.1.10
+# WebDeploy MCP v0.1.11
 
 This release fixes Claude Code OAuth sign-in and includes v0.1.9's Pages service and
 deployment lock hardening.
 
 ## Highlights
 
-- Claude Code can authenticate again: client metadata documents with RFC 8252 loopback
-  redirect URIs (`http://localhost`, `http://127.0.0.1`, `http://[::1]`) are accepted instead
-  of failing with `invalid_client: client is not allowed`.
+- Claude Code can authenticate again: loopback redirect URIs from client metadata documents
+  are accepted, and their ephemeral ports are matched per RFC 8252 section 7.3, fixing both
+  `invalid_client: client is not allowed` and `invalid_redirect_uri`.
 - One-off static pages no longer need a project: `publish_page` writes files into a per-account
   directory served at `PUBLIC_URL/pages/<slug>/`.
 - Each Pages site has a publish token for a plain HTTP API (`/api/pages/publish`,
@@ -23,7 +23,7 @@ deployment lock hardening.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.10.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.11.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

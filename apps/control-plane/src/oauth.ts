@@ -129,6 +129,19 @@ export async function createOAuthRuntime(
   });
   provider.proxy = config.TRUST_PROXY;
 
+  // RFC 8252 section 7.3: loopback redirect URIs must match with the port
+  // ignored, because native clients bind an ephemeral port at runtime.
+  // oidc-provider only applies this to application_type "native" clients, and
+  // client metadata documents (for example Claude Code) default to "web".
+  const clientPrototype = (provider.Client as any).prototype;
+  const defaultRedirectUriAllowed = clientPrototype.redirectUriAllowed;
+  clientPrototype.redirectUriAllowed = function (redirectUri: string): boolean {
+    return (
+      defaultRedirectUriAllowed.call(this, redirectUri) ||
+      matchesLoopbackRedirect(this.redirectUris ?? [], redirectUri)
+    );
+  };
+
   // Codex CLI 0.145.0 drops `iss` while relaying the loopback callback, then
   // rejects the response when discovery advertises RFC 9207 support. Keep
   // sending `iss`, but advertise the temporary compatibility value until that
@@ -384,6 +397,30 @@ export function isAllowedClientRedirectUri(value: string): boolean {
     if (url.protocol !== "http:") return false;
     const hostname = url.hostname.toLowerCase();
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+export function matchesLoopbackRedirect(registeredUris: string[], redirectUri: string): boolean {
+  try {
+    const requested = new URL(redirectUri);
+    if (requested.protocol !== "http:" || requested.search || requested.username) return false;
+    const hostname = requested.hostname.toLowerCase();
+    if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "[::1]") return false;
+    return registeredUris.some((value) => {
+      try {
+        const registered = new URL(value);
+        return (
+          registered.protocol === "http:" &&
+          registered.hostname.toLowerCase() === hostname &&
+          registered.pathname === requested.pathname &&
+          !registered.search
+        );
+      } catch {
+        return false;
+      }
+    });
   } catch {
     return false;
   }

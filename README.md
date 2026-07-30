@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.10 fixes Claude Code OAuth (loopback redirect URIs in client
-> metadata documents) on top of v0.1.9's Pages service and user-database lock retries.
+> **Release status:** v0.1.11 fixes Claude Code OAuth (loopback redirect URIs and RFC 8252
+> port matching) on top of v0.1.9's Pages service and user-database lock retries.
 
 ## What it provides
 
