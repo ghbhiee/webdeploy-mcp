@@ -1,4 +1,4 @@
-# WebDeploy MCP v0.1.7
+# WebDeploy MCP v0.1.8
 
 This release simplifies accounts and Passkey administration.
 
@@ -12,7 +12,7 @@ This release simplifies accounts and Passkey administration.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.7.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.8.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

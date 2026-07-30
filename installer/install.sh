@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-RELEASE_VERSION="${WEBDEPLOY_VERSION:-v0.1.7}"
+RELEASE_VERSION="${WEBDEPLOY_VERSION:-v0.1.8}"
 REPOSITORY="${WEBDEPLOY_REPOSITORY:-ghbhiee/webdeploy-mcp}"
 INSTALL_ROOT="/opt/webdeploy"
 DATA_DIR="/var/lib/webdeploy"

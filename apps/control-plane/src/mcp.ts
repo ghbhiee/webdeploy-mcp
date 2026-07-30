@@ -54,7 +54,7 @@ function createMcpServer(
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.7" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.8" },
     {
       instructions:
         "Use get_project before mutating a project. Deployment tools never accept environment variable values. Direct users to the returned settingsUrl for secrets and advanced configuration. Confirm before delete_project or rollback_release.",
@@ -79,7 +79,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.7", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.8", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },

@@ -2,6 +2,12 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.8] - 2026-07-30
+
+### Fixed
+
+- First Passkey bootstrap now depends only on whether a Passkey has ever been enrolled
+
 ## [0.1.7] - 2026-07-30
 
 ### Changed

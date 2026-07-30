@@ -107,12 +107,8 @@ export async function registerPasskeyRoutes(
       const requestCode = `WDP-${randomToken(9).toUpperCase()}`;
       const result = await withTransaction(database, async (client) => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('webdeploy-first-admin'))");
-        const adminCount = await client.query(
-          "SELECT count(*)::int AS count FROM users WHERE is_admin=true AND status='active'",
-        );
         const passkeyCount = await client.query("SELECT count(*)::int AS count FROM passkeys");
-        const firstAdministrator =
-          adminCount.rows[0].count === 0 && passkeyCount.rows[0].count === 0;
+        const firstAdministrator = passkeyCount.rows[0].count === 0;
         const enrollment = await client.query(
           `INSERT INTO passkey_enrollment_requests
            (user_id,request_code,requested_ip,requested_user_agent,expires_at,status,reviewed_at)
