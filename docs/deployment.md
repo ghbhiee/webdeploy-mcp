@@ -6,7 +6,7 @@ Defaults are shown; the installer can change all three roots.
 
 ```text
 /opt/webdeploy/
-  current -> releases/v0.1.5
+  current -> releases/v0.1.6
   releases/<version>/
 /var/lib/webdeploy/
   projects/<project-id>/releases/<release-id>/
@@ -68,7 +68,7 @@ configured Node.js and/or Python version. Static projects must produce a non-emp
 Create the project once, identify its OS user from PostgreSQL or the project directory, then
 install a read-only repository deploy key in that user's `.ssh` directory. Use strict permissions,
 pin the host key in `known_hosts`, and configure the project with an SSH Git URL. The Dashboard
-does not accept private-key material in v0.1.5.
+does not accept private-key material in v0.1.6.
 
 ## Backup and recovery
 

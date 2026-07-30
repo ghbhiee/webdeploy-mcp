@@ -36,6 +36,25 @@ export function setCsrf(value?: string): void {
   csrfToken = value ?? "";
 }
 
+export function responseErrorMessage(data: unknown, status: number): string {
+  if (typeof data !== "object" || data === null) {
+    return `Request failed with HTTP ${status}`;
+  }
+  const body = data as { error?: { message?: unknown } | unknown; message?: unknown };
+  if (
+    typeof body.error === "object" &&
+    body.error !== null &&
+    "message" in body.error &&
+    typeof body.error.message === "string"
+  ) {
+    return body.error.message;
+  }
+  if (typeof body.message === "string") {
+    return body.message;
+  }
+  return `Request failed with HTTP ${status}`;
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
@@ -51,7 +70,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error?.message ?? `Request failed with HTTP ${response.status}`);
+    throw new Error(responseErrorMessage(data, response.status));
   }
   return data as T;
 }

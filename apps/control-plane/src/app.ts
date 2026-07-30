@@ -73,9 +73,28 @@ export async function buildApp(config: Config = loadConfig()) {
     limits: { files: 1, fileSize: config.MAX_UPLOAD_BYTES },
   });
 
+  // Fastify snapshots the active error handler when each route is registered.
+  // Register ours first so AppError responses keep the dashboard's stable
+  // { error: { code, message } } contract instead of Fastify's default shape.
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof AppError) {
+      return reply
+        .code(error.statusCode)
+        .send({ error: { code: error.code, message: error.message } });
+    }
+    request.log.error(error);
+    const statusCode = (error as any).statusCode ?? 500;
+    return reply.code(statusCode).send({
+      error: {
+        code: "INTERNAL_ERROR",
+        message: statusCode >= 500 ? "Internal server error" : (error as Error).message,
+      },
+    });
+  });
+
   app.get("/healthz", async () => {
     await database.query("SELECT 1");
-    return { status: "ok", version: "0.1.5" };
+    return { status: "ok", version: "0.1.6" };
   });
 
   await registerPasskeyRoutes(app, { database, config });
@@ -95,22 +114,6 @@ export async function buildApp(config: Config = loadConfig()) {
       return reply.sendFile("index.html");
     });
   }
-
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof AppError) {
-      return reply
-        .code(error.statusCode)
-        .send({ error: { code: error.code, message: error.message } });
-    }
-    request.log.error(error);
-    const statusCode = (error as any).statusCode ?? 500;
-    return reply.code(statusCode).send({
-      error: {
-        code: "INTERNAL_ERROR",
-        message: statusCode >= 500 ? "Internal server error" : (error as Error).message,
-      },
-    });
-  });
 
   app.addHook("onClose", async () => {
     await database.end();

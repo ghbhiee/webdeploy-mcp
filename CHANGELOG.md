@@ -2,6 +2,13 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.6] - 2026-07-29
+
+### Fixed
+
+- Dashboard login now displays the control plane's actionable Passkey/account error instead of a generic HTTP 401
+- Fastify error handling is registered before routes so API errors consistently use the documented response envelope
+
 ## [0.1.5] - 2026-07-29
 
 ### Fixed
