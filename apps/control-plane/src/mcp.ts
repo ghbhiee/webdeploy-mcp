@@ -60,7 +60,7 @@ function createMcpServer(
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.17" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.18" },
     {
       instructions:
         "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, provision_database when the app needs PostgreSQL (DATABASE_URL is injected automatically), a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL returned by get_deployment_status — every project is served at a default path under the platform host without any DNS setup; set_custom_domain can replace it with a dedicated hostname later. Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
@@ -129,7 +129,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.17", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.18", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },

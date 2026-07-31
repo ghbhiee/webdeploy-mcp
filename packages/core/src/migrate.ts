@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createDatabase } from "./db.js";
+import { createDatabase, withTransaction } from "./db.js";
 
 export async function migrate(
   connectionString: string,
@@ -24,7 +24,17 @@ export async function migrate(
       ]);
       if (exists.rowCount) continue;
       const sql = await readFile(resolve(migrationsDirectory, file), "utf8");
-      await database.query(sql);
+      // The runner registers the version itself so a migration file that
+      // forgets its own INSERT cannot be re-applied forever; files that do
+      // insert stay compatible via ON CONFLICT DO NOTHING. One transaction
+      // per migration keeps apply-and-register atomic.
+      await withTransaction(database, async (client) => {
+        await client.query(sql);
+        await client.query(
+          "INSERT INTO schema_migrations(version) VALUES ($1) ON CONFLICT DO NOTHING",
+          [version],
+        );
+      });
     }
   } finally {
     await database.end();

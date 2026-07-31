@@ -504,6 +504,7 @@ if [[ "$AUTO_UPDATE" == yes ]]; then
 fi
 
 created_release=no
+touch "$RELEASE_DIR/.webdeploy-complete"
 trap - EXIT
 WEBDEPLOY_ENV_FILE="$CONFIG_DIR/webdeploy.env" webdeploy mcp \
   --output "$CONFIG_DIR/mcp-install.txt" >/dev/null

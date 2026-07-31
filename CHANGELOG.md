@@ -2,6 +2,21 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.18] - 2026-07-31
+
+### Fixed
+
+- Migration `003_databases.sql` (shipped in 0.1.16) was missing its
+  `schema_migrations` registration footer, so the next update re-ran it and aborted on
+  `relation "project_databases" already exists`. The file is now idempotent and registered,
+  and the migration runner itself records each applied version in the same transaction —
+  a migration file that forgets its footer can no longer wedge future updates
+- `webdeploy update` is now atomic: releases are extracted and built in a staging directory
+  and only moved into place on success, and a release directory only counts as "already
+  installed" when it carries a completion marker or is the running release. Previously a
+  failed update left a half-built directory that made every retry report
+  "already installed" while services kept running the old version
+
 ## [0.1.17] - 2026-07-31
 
 ### Fixed
