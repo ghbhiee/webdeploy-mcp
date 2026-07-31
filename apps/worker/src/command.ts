@@ -1,5 +1,10 @@
 import { spawn } from "node:child_process";
-import { redactText } from "@webdeploy/core";
+import {
+  redactText,
+  removeStaleUserDatabaseLocks,
+  type LockInspectionOptions,
+  type UserDatabaseLock,
+} from "@webdeploy/core";
 
 export interface CommandResult {
   code: number;
@@ -81,9 +86,17 @@ export function isUserDatabaseLockError(error: unknown): boolean {
 export async function runUserDatabaseCommand(
   executable: string,
   args: string[],
-  options: Parameters<typeof runCommand>[2] & { maxAttempts?: number; retryDelayMs?: number } = {},
+  options: Parameters<typeof runCommand>[2] & {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+  } & LockInspectionOptions = {},
 ): Promise<CommandResult> {
-  const { maxAttempts = 10, retryDelayMs = 500, ...commandOptions } = options;
+  const { maxAttempts = 15, retryDelayMs = 500, lockFiles, procRoot, ...commandOptions } = options;
+  const lockOptions: LockInspectionOptions = {};
+  if (lockFiles) lockOptions.lockFiles = lockFiles;
+  if (procRoot) lockOptions.procRoot = procRoot;
+  const removedStaleLocks: string[] = [];
+  let heldLocks: UserDatabaseLock[] = [];
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -91,16 +104,38 @@ export async function runUserDatabaseCommand(
     } catch (error) {
       lastError = error;
       if (!isUserDatabaseLockError(error) || attempt === maxAttempts) break;
-      await new Promise((resolve) => setTimeout(resolve, Math.min(retryDelayMs * attempt, 5_000)));
+      // A lock that survives several retries has outlived any normal
+      // shadow-utils run; clear lock files whose holder is dead so a crashed
+      // process cannot block deployments forever. Live holders are never
+      // touched — those get the backoff below.
+      if (attempt >= 3) {
+        const cleaned = await removeStaleUserDatabaseLocks(lockOptions).catch(() => null);
+        if (cleaned) {
+          heldLocks = cleaned.held;
+          if (cleaned.removed.length) {
+            removedStaleLocks.push(...cleaned.removed);
+            continue;
+          }
+        }
+      }
+      const backoff = Math.min(retryDelayMs * 2 ** (attempt - 1), 15_000);
+      await new Promise((resolve) => setTimeout(resolve, backoff + Math.random() * 250));
     }
   }
   if (isUserDatabaseLockError(lastError)) {
     const detail = lastError instanceof Error ? lastError.message : String(lastError);
+    const liveHolders = heldLocks
+      .filter((lock) => lock.alive)
+      .map((lock) => `${lock.path} held by pid ${lock.pid}${lock.command ? ` (${lock.command})` : ""}`)
+      .join("; ");
     throw new Error(
       `${executable} could not lock the system user database after ${maxAttempts} attempts. ` +
-        "Another process (apt, unattended-upgrades, cloud-init, or another useradd) is holding " +
-        "/etc/passwd or /etc/shadow, or a crashed process left a stale lock file " +
-        "(/etc/passwd.lock, /etc/shadow.lock, /etc/group.lock, /etc/gshadow.lock). " +
+        (removedStaleLocks.length
+          ? `Stale lock files were detected and removed automatically (${removedStaleLocks.join(", ")}), but locking still failed. `
+          : "") +
+        (liveHolders
+          ? `A running process still holds the lock: ${liveHolders}. Wait for it to finish (for example an apt or unattended-upgrades run) and redeploy. `
+          : "No stale lock file was found, so another process (apt, unattended-upgrades, cloud-init, or another useradd) is repeatedly acquiring the lock. ") +
         `Last error: ${detail}`,
     );
   }

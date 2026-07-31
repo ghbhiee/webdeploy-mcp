@@ -1,10 +1,14 @@
-# WebDeploy MCP v0.1.11
+# WebDeploy MCP v0.1.12
 
 This release fixes Claude Code OAuth sign-in and includes v0.1.9's Pages service and
 deployment lock hardening.
 
 ## Highlights
 
+- Stale `/etc/passwd.lock`-style lock files left by crashed processes are detected by holder
+  PID and removed automatically during deployment retries; locks held by a live process are
+  never touched and the holder is named in the error. `webdeploy doctor --fix` cleans them
+  manually. Lock retries now use exponential backoff over a larger window.
 - Claude Code can authenticate again: loopback redirect URIs from client metadata documents
   are accepted, and their ephemeral ports are matched per RFC 8252 section 7.3, fixing both
   `invalid_client: client is not allowed` and `invalid_redirect_uri`.
@@ -23,7 +27,7 @@ deployment lock hardening.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.11.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.12.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

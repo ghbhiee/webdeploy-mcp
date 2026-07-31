@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   isUserDatabaseLockError,
@@ -37,6 +40,41 @@ describe("system user database lock handling", () => {
         ["-c", 'echo "cannot lock /etc/passwd; try again later." >&2; exit 1'],
         { maxAttempts: 2, retryDelayMs: 1 },
       ),
-    ).rejects.toThrow(/stale lock file/);
+    ).rejects.toThrow(/could not lock the system user database/);
+  });
+
+  it("removes a stale lock file mid-retry and then succeeds", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wdp-retry-"));
+    const procRoot = join(root, "proc");
+    mkdirSync(procRoot, { recursive: true });
+    const lock = join(root, "group.lock");
+    writeFileSync(lock, "424242\n");
+    // Fails with a lock-style error for as long as the lock file exists; the
+    // stale-lock cleanup on the third attempt unblocks it.
+    const script = `if [ -e "${lock}" ]; then echo "groupadd: cannot lock /etc/group; try again later." >&2; exit 10; fi; echo ok`;
+    const result = await runUserDatabaseCommand("bash", ["-c", script], {
+      retryDelayMs: 1,
+      lockFiles: [lock],
+      procRoot,
+    });
+    expect(result.stdout.trim()).toBe("ok");
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("reports the live holder instead of deleting its lock", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wdp-held-"));
+    const procRoot = join(root, "proc");
+    mkdirSync(join(procRoot, "555"), { recursive: true });
+    writeFileSync(join(procRoot, "555", "comm"), "unattended-upgr\n");
+    const lock = join(root, "passwd.lock");
+    writeFileSync(lock, "555");
+    await expect(
+      runUserDatabaseCommand(
+        "bash",
+        ["-c", 'echo "useradd: cannot lock /etc/passwd; try again later." >&2; exit 1'],
+        { maxAttempts: 4, retryDelayMs: 1, lockFiles: [lock], procRoot },
+      ),
+    ).rejects.toThrow(/held by pid 555 \(unattended-upgr\)/);
+    expect(existsSync(lock)).toBe(true);
   });
 });

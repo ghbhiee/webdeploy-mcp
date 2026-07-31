@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { loadEnvFile } from "node:process";
 import { resolve } from "node:path";
@@ -14,7 +14,9 @@ const {
   AppError,
   createDatabase,
   createMcpInstallCatalog,
+  inspectUserDatabaseLocks,
   loadConfig,
+  removeStaleUserDatabaseLocks,
   renderMcpInstallGuide,
   writeAudit,
 } = await import("@webdeploy/core");
@@ -23,7 +25,7 @@ const database = createDatabase(config.DATABASE_URL);
 const program = new Command()
   .name("webdeploy")
   .description("Administer a local WebDeploy MCP installation")
-  .version("0.1.11");
+  .version("0.1.12");
 
 program
   .command("status")
@@ -79,7 +81,8 @@ program
 program
   .command("doctor")
   .description("Check required software and configuration")
-  .action(async () => {
+  .option("--fix", "Remove stale system user database lock files whose holder is dead")
+  .action(async (options: { fix?: boolean }) => {
     const checks = [
       ["node", ["--version"]],
       ["pm2", ["--version"]],
@@ -98,30 +101,30 @@ program
       status: existsSync(config.MASTER_KEY_FILE) ? "ok" : "missing",
     });
     rows.push({ check: "OIDC JWKS", status: existsSync(config.OIDC_JWKS_FILE) ? "ok" : "missing" });
-    // useradd fails while these exist; a lock older than a few minutes almost
-    // always belongs to a crashed process rather than a running one.
-    const staleLocks = [
-      "/etc/passwd.lock",
-      "/etc/shadow.lock",
-      "/etc/group.lock",
-      "/etc/gshadow.lock",
-    ].filter((path) => {
-      try {
-        return Date.now() - statSync(path).mtimeMs > 300_000;
-      } catch {
-        return false;
-      }
-    });
-    rows.push({
-      check: "user database locks",
-      status: staleLocks.length ? `stale: ${staleLocks.join(", ")}` : "ok",
-    });
+    // useradd/groupadd fail while these exist; the lock file records the
+    // holding PID, so a dead holder means a crashed process left it behind.
+    const locks = await inspectUserDatabaseLocks();
+    const stale = locks.filter((lock) => !lock.alive);
+    const held = locks.filter((lock) => lock.alive);
+    let lockStatus = "ok";
+    if (held.length) {
+      lockStatus = `ok (in use by ${held
+        .map((lock) => `pid ${lock.pid}${lock.command ? ` ${lock.command}` : ""}`)
+        .join(", ")})`;
+    }
+    if (stale.length && options.fix) {
+      const { removed } = await removeStaleUserDatabaseLocks();
+      lockStatus = removed.length ? `ok (removed ${removed.join(", ")})` : lockStatus;
+    } else if (stale.length) {
+      lockStatus = `stale: ${stale.map((lock) => lock.path).join(", ")} — run webdeploy doctor --fix`;
+    }
+    rows.push({ check: "user database locks", status: lockStatus });
     rows.push({
       check: "database",
       status: (await database.query("SELECT 1")).rowCount ? "ok" : "failed",
     });
     printRows(rows);
-    if (rows.some((row) => row.status !== "ok")) process.exitCode = 1;
+    if (rows.some((row) => !(row.status ?? "").startsWith("ok"))) process.exitCode = 1;
   });
 
 program

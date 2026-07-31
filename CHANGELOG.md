@@ -2,6 +2,20 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.12] - 2026-07-31
+
+### Fixed
+
+- A stale system user database lock file (for example `/etc/group.lock` left by a crashed
+  process) no longer blocks deployments forever: after a few failed attempts the worker reads
+  the lock file's PID and, only when that process no longer exists, removes the stale lock and
+  retries; locks held by a live process are never touched and the holder (pid/command) is
+  reported in the deployment error instead
+- Lock retries now use exponential backoff with jitter over a larger window (~2.5 minutes),
+  surviving longer apt/unattended-upgrades runs
+- `webdeploy doctor` detects stale locks by holder PID instead of file age, and
+  `webdeploy doctor --fix` removes them
+
 ## [0.1.11] - 2026-07-30
 
 ### Fixed

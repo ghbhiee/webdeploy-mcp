@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.11 fixes Claude Code OAuth (loopback redirect URIs and RFC 8252
-> port matching) on top of v0.1.9's Pages service and user-database lock retries.
+> **Release status:** v0.1.12 auto-recovers from stale system user database lock files during
+> deployment, on top of v0.1.11's Claude Code OAuth fixes and v0.1.9's Pages service.
 
 ## What it provides
 
@@ -376,9 +376,9 @@ browser tests, and shell syntax checks on Ubuntu.
 - **Certificate failure:** confirm DNS and inbound 80/443, then run the printed `certbot --nginx` command.
 - **Private Git:** use an SSH URL and install a read-only deploy key for the project's isolated Linux
   user. Never put credentials in a Git URL.
-- **`useradd: cannot lock /etc/passwd`:** the worker retries this automatically. If it still fails,
-  another package manager run is holding the lock, or a crashed process left a stale
-  `/etc/passwd.lock`, `/etc/shadow.lock`, `/etc/group.lock`, or `/etc/gshadow.lock` file.
+- **`useradd: cannot lock /etc/passwd`:** the worker retries with backoff and removes stale lock
+  files whose holding process is dead. If deployment still fails, the error names the live
+  process holding the lock; wait for it to finish, or run `sudo webdeploy doctor --fix`.
 
 See [Deployment and operations](docs/deployment.md) for details.
 

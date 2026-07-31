@@ -10,4 +10,5 @@ export * from "./pages.js";
 export * from "./projects.js";
 export * from "./deployments.js";
 export * from "./redaction.js";
+export * from "./system-locks.js";
 export * from "./types.js";
