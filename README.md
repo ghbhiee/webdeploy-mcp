@@ -225,6 +225,7 @@ not present. Client-specific troubleshooting is covered in [MCP clients](docs/mc
 | `configure_project`           | Update git source, commands, port, health check, … |
 | `set_environment_variables`   | Upsert env vars (`plain` or `secret`)              |
 | `delete_environment_variable` | Remove one env var                                 |
+| `provision_database`          | Dedicated PostgreSQL DB; injects `DATABASE_URL`    |
 | `deploy_project`              | Deploy configured Git source                       |
 | `deploy_from_git`             | Deploy a Git URL/ref                               |
 | `deploy_inline_files`         | Deploy up to 100 small files (1 MiB total)         |

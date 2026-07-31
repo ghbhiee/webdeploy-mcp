@@ -400,6 +400,72 @@ export class ProjectService {
     );
     return result.rows[0].id;
   }
+
+  async getDatabase(actor: Actor, projectId: string): Promise<ProjectDatabaseRecord | null> {
+    await this.get(actor, projectId);
+    const result = await this.database.query(
+      `SELECT db_name, status, error_message, provisioned_at
+       FROM project_databases WHERE project_id=$1`,
+      [projectId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      dbName: row.db_name,
+      status: row.status,
+      errorMessage: row.error_message,
+      provisionedAt: row.provisioned_at,
+    };
+  }
+
+  async queueDatabaseProvision(actor: Actor, projectId: string): Promise<string> {
+    await this.get(actor, projectId);
+    const identifier = `wdp_${projectId.replaceAll("-", "").slice(0, 12)}`;
+    return withTransaction(this.database, async (client) => {
+      const existing = await client.query(
+        "SELECT status FROM project_databases WHERE project_id=$1 FOR UPDATE",
+        [projectId],
+      );
+      const status = existing.rows[0]?.status;
+      if (status === "provisioned") {
+        throw new AppError(
+          "DATABASE_ALREADY_PROVISIONED",
+          "This project already has a database; DATABASE_URL is set as a secret environment variable",
+        );
+      }
+      if (status === "provisioning") {
+        throw new AppError("DATABASE_PROVISIONING", "Database provisioning is already queued");
+      }
+      await client.query(
+        `INSERT INTO project_databases(project_id, db_name, db_role, status)
+         VALUES($1,$2,$2,'provisioning')
+         ON CONFLICT(project_id) DO UPDATE SET status='provisioning', error_message=NULL`,
+        [projectId, identifier],
+      );
+      const operation = await client.query(
+        `INSERT INTO project_operations(project_id,requested_by,kind)
+         VALUES($1,$2,'db_provision') RETURNING id`,
+        [projectId, actor.id],
+      );
+      return operation.rows[0].id as string;
+    }).then(async (operationId) => {
+      await writeAudit(this.database, {
+        actorUserId: actor.id,
+        action: "project.database.provision",
+        targetType: "project",
+        targetId: projectId,
+        metadata: { dbName: identifier },
+      });
+      return operationId;
+    });
+  }
+}
+
+export interface ProjectDatabaseRecord {
+  dbName: string;
+  status: "provisioning" | "provisioned" | "failed";
+  errorMessage: string | null;
+  provisionedAt: Date | null;
 }
 
 export async function getProjectForWorker(

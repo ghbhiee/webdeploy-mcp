@@ -896,3 +896,16 @@ td small {
     scroll-behavior: auto !important;
   }
 }
+
+.live-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent, #6ea8fe);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.live-link:hover {
+  text-decoration: underline;
+}

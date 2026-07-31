@@ -60,10 +60,10 @@ function createMcpServer(
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.15" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.16" },
     {
       instructions:
-        "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL returned by get_deployment_status — every project is served at a default path under the platform host without any DNS setup; set_custom_domain can replace it with a dedicated hostname later. Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
+        "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, provision_database when the app needs PostgreSQL (DATABASE_URL is injected automatically), a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL returned by get_deployment_status — every project is served at a default path under the platform host without any DNS setup; set_custom_domain can replace it with a dedicated hostname later. Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
     },
   );
   const read = () => requireScope(scopes, "platform:read");
@@ -129,7 +129,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.15", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.16", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },
@@ -162,14 +162,35 @@ function createMcpServer(
       read();
       const project = await dependencies.projects.get(actor, projectId);
       const environment = await dependencies.projects.listEnvironment(actor, projectId);
+      const database = await dependencies.projects.getDatabase(actor, projectId);
       return result(
         {
           project,
           environment,
+          database,
           publicUrl: publicUrl(project),
           settingsUrl: `${dependencies.config.PUBLIC_URL}/projects/${projectId}/setup`,
         },
         `Project ${project.name} is ${project.status}${readiness(project)}.`,
+      );
+    },
+  );
+
+  server.registerTool(
+    "provision_database",
+    {
+      title: "Provision a PostgreSQL database",
+      description:
+        "Create a dedicated PostgreSQL database and role for this project on the platform host. The connection string is injected as the DATABASE_URL secret environment variable (never readable back). Poll get_project until database.status is 'provisioned', then deploy or restart to apply. The database is dropped with the project on delete_project.",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ projectId }) => {
+      projectWrite();
+      const operationId = await dependencies.projects.queueDatabaseProvision(actor, projectId);
+      return result(
+        { operationId, status: "queued" },
+        `Database provisioning ${operationId} was queued. Poll get_project until database.status is provisioned; DATABASE_URL will be set as a secret environment variable.`,
       );
     },
   );

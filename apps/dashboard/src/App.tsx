@@ -11,8 +11,16 @@ type Project = {
   status: string;
   ownerUsername: string;
   primaryHostname: string | null;
+  publicUrl?: string;
   settings: Record<string, any>;
 };
+
+type DatabaseInfo = {
+  dbName: string;
+  status: "provisioning" | "provisioned" | "failed";
+  errorMessage: string | null;
+  provisionedAt: string | null;
+} | null;
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -194,6 +202,19 @@ function ProjectsPage({
               </div>
               <h2>{project.name}</h2>
               <p>{project.slug}</p>
+              {project.publicUrl && (
+                <span
+                  className="live-link"
+                  role="link"
+                  title={project.publicUrl}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(project.publicUrl, "_blank", "noopener");
+                  }}
+                >
+                  {project.publicUrl.replace(/^https?:\/\//, "")} ↗
+                </span>
+              )}
               <div className="project-card-footer">
                 <span>{project.ownerUsername}</span>
                 <strong>{project.status}</strong>
@@ -436,6 +457,7 @@ function ProjectPage({
     project: Project;
     environment: Array<any>;
     releases: Array<any>;
+    databaseInfo?: DatabaseInfo;
   } | null>(null);
   const [tab, setTab] = useState<"settings" | "environment" | "releases">("settings");
   const [deployment, setDeployment] = useState<any>(null);
@@ -474,6 +496,18 @@ function ProjectPage({
           <p>
             <span className={`status-dot ${data.project.status}`} /> {data.project.status}
           </p>
+          {data.project.publicUrl && (
+            <p>
+              <a
+                className="live-link"
+                href={data.project.publicUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {data.project.publicUrl} ↗
+              </a>
+            </p>
+          )}
         </div>
         <button
           className="primary"
@@ -565,7 +599,15 @@ function ProjectPage({
         ))}
       </div>
       {tab === "settings" ? (
-        <SettingsForm project={data.project} isAdmin={isAdmin} onSaved={load} show={show} />
+        <>
+          <SettingsForm project={data.project} isAdmin={isAdmin} onSaved={load} show={show} />
+          <DatabasePanel
+            projectId={projectId}
+            info={data.databaseInfo ?? null}
+            onChanged={load}
+            show={show}
+          />
+        </>
       ) : tab === "environment" ? (
         <EnvironmentPanel
           projectId={projectId}
@@ -582,6 +624,72 @@ function ProjectPage({
         />
       )}
     </>
+  );
+}
+
+function DatabasePanel({
+  projectId,
+  info,
+  onChanged,
+  show,
+}: {
+  projectId: string;
+  info: DatabaseInfo;
+  onChanged: () => void;
+  show: (kind: "error" | "success", text: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (info?.status !== "provisioning") return;
+    const timer = setInterval(onChanged, 2000);
+    return () => clearInterval(timer);
+  }, [info?.status, onChanged]);
+  const provision = async () => {
+    setBusy(true);
+    try {
+      await api(`/api/projects/${projectId}/database`, { method: "POST" });
+      show("success", "Database provisioning queued.");
+      onChanged();
+    } catch (error) {
+      show("error", message(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="panel">
+      <h2>Database</h2>
+      {!info ? (
+        <>
+          <p>
+            No database yet. Provisioning creates a dedicated PostgreSQL database on this host and
+            injects its connection string as the <code>DATABASE_URL</code> secret environment
+            variable.
+          </p>
+          <button className="primary" onClick={provision} disabled={busy}>
+            {busy ? "Queueing…" : "Provision database"}
+          </button>
+        </>
+      ) : info.status === "provisioned" ? (
+        <p>
+          <span className="pill">provisioned</span> <code>{info.dbName}</code> — available to the
+          app as <code>DATABASE_URL</code> (secret, write-only). Deploy or restart to apply.
+        </p>
+      ) : info.status === "provisioning" ? (
+        <p>
+          <span className="pill">provisioning…</span> This normally completes within seconds.
+        </p>
+      ) : (
+        <>
+          <p>
+            <span className="pill">failed</span> {info.errorMessage}
+          </p>
+          <button className="primary" onClick={provision} disabled={busy}>
+            {busy ? "Queueing…" : "Retry provisioning"}
+          </button>
+        </>
+      )}
+    </section>
   );
 }
 

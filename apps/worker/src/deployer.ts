@@ -26,6 +26,7 @@ import {
   ensureProjectUsersGroup,
   ensureUserInProjectsGroup,
 } from "./hardening.js";
+import { dropProjectDatabase, provisionProjectDatabase } from "./databases.js";
 import {
   activateAppNginxConfig,
   activateNginxConfig,
@@ -187,6 +188,8 @@ export class Deployer {
       if (operation.kind === "restart") await this.restartProject(project);
       else if (operation.kind === "rollback") {
         await this.rollbackProject(project, operation.target_release_id);
+      } else if (operation.kind === "db_provision") {
+        await provisionProjectDatabase(this.database, this.config, this.masterKey, project);
       } else await this.deleteProject(project);
       await this.database.query(
         "UPDATE project_operations SET status='succeeded',finished_at=now() WHERE id=$1",
@@ -602,6 +605,7 @@ export class Deployer {
     }
     await removeAppNginxConfig(this.config, project.id);
     await removeNginxConfig(this.config, project.id);
+    await dropProjectDatabase(this.database, project.id);
     const projectRoot = safeChild(this.config.DATA_DIR, "projects", project.id);
     if (existsSync(projectRoot)) await rm(projectRoot, { recursive: true, force: true });
     if (project.os_user) {

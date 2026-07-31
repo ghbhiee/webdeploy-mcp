@@ -7,9 +7,11 @@ import {
   AppError,
   DeploymentService,
   ProjectService,
+  appDefaultPublicUrl,
   randomToken,
   type Config,
   type Database,
+  type ProjectRecord,
 } from "@webdeploy/core";
 import { requireSession } from "./session.js";
 
@@ -23,6 +25,10 @@ export function registerProjectRoutes(
   },
 ): void {
   const { database, config, projects, deployments } = dependencies;
+  const publicUrl = (project: ProjectRecord) =>
+    project.primaryHostname
+      ? `https://${project.primaryHostname}`
+      : appDefaultPublicUrl(config.PUBLIC_URL, config.APP_BASE_PATH, project.slug);
   app.post("/api/webhooks/projects/:projectId", async (request) => {
     const projectId = (request.params as any).projectId;
     const signature = String(request.headers["x-webdeploy-signature"] ?? "");
@@ -40,7 +46,10 @@ export function registerProjectRoutes(
   });
   app.get("/api/projects", async (request) => {
     const { actor } = await requireSession(request, database, config);
-    return { projects: await projects.list(actor) };
+    const list = await projects.list(actor);
+    return {
+      projects: list.map((project) => ({ ...project, publicUrl: publicUrl(project) })),
+    };
   });
   app.post("/api/projects", async (request) => {
     const { actor } = await requireSession(request, database, config, true);
@@ -51,10 +60,18 @@ export function registerProjectRoutes(
   app.get("/api/projects/:projectId", async (request) => {
     const { actor } = await requireSession(request, database, config);
     const projectId = (request.params as any).projectId;
+    const project = await projects.get(actor, projectId);
     return {
-      project: await projects.get(actor, projectId),
+      project: { ...project, publicUrl: publicUrl(project) },
       environment: await projects.listEnvironment(actor, projectId),
       releases: await deployments.releases(actor, projectId),
+      databaseInfo: await projects.getDatabase(actor, projectId),
+    };
+  });
+  app.post("/api/projects/:projectId/database", async (request) => {
+    const { actor } = await requireSession(request, database, config, true);
+    return {
+      operationId: await projects.queueDatabaseProvision(actor, (request.params as any).projectId),
     };
   });
   app.patch("/api/projects/:projectId", async (request) => {

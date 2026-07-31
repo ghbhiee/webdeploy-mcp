@@ -2,6 +2,25 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.16] - 2026-07-31
+
+### Added
+
+- PostgreSQL provisioning for projects: the new `provision_database` MCP tool (and the
+  matching `POST /api/projects/:id/database` Dashboard action) creates a dedicated database
+  and login role on the platform host, injects the connection string as the `DATABASE_URL`
+  secret environment variable (write-only, encrypted at rest), and reports progress through
+  `get_project` (`database.status`: provisioning → provisioned/failed). The database and role
+  are dropped together with the project on deletion
+- Dashboard now shows the live deployment link everywhere: as a clickable URL on each project
+  card and in the project page header (default `/apps/<slug>/` URL, or the custom domain once
+  configured), plus a Database panel on the settings tab with provision/retry
+
+### Changed
+
+- Migration `003_databases.sql` adds the `project_databases` table and the `db_provision`
+  operation kind
+
 ## [0.1.15] - 2026-07-31
 
 ### Added
