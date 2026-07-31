@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -44,8 +44,13 @@ describeDatabase("PostgreSQL schema", () => {
   });
 
   it("records migrations by full file name and remains idempotent", async () => {
+    const expected = readdirSync(new URL("../../migrations", import.meta.url).pathname)
+      .filter((file) => /^\d+_.+\.sql$/.test(file))
+      .map((file) => ({ version: file.replace(/\.sql$/, "") }))
+      .sort((a, b) => a.version.localeCompare(b.version));
+    expect(expected.length).toBeGreaterThan(0);
     const versions = await database.query("SELECT version FROM schema_migrations ORDER BY version");
-    expect(versions.rows).toEqual([{ version: "001_initial" }, { version: "002_pages" }]);
+    expect(versions.rows).toEqual(expected);
   });
 
   it("allocates only one row per port", async () => {
