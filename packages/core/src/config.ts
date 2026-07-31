@@ -34,6 +34,12 @@ const schema = z.object({
   RELEASE_RETENTION_DEFAULT: z.coerce.number().int().min(1).max(50).default(5),
   ADMIN_SOCKET: z.string().default("/run/webdeploy/admin.sock"),
   NGINX_SITES_DIR: z.string().default("/etc/nginx/conf.d"),
+  NGINX_SNIPPET_FILE: z.string().default("/etc/nginx/snippets/webdeploy-control.conf"),
+  NGINX_APPS_DIR: z.string().default("/etc/nginx/webdeploy-apps.d"),
+  APP_BASE_PATH: z
+    .string()
+    .regex(/^\/[a-z0-9][a-z0-9/-]*$/)
+    .default("/apps"),
   PM2_HOME: z.string().default("/var/lib/webdeploy/pm2"),
   RUNTIME_MANAGER: z.enum(["mise", "system"]).default("mise"),
 });
@@ -61,6 +67,10 @@ export function publicBasePath(publicUrl: string): string {
 export function publicPath(publicUrl: string, path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${publicBasePath(publicUrl)}${normalizedPath}`;
+}
+
+export function appDefaultPublicUrl(publicUrl: string, appBasePath: string, slug: string): string {
+  return `${new URL(publicUrl).origin}${appBasePath}/${slug}/`;
 }
 
 export function loadMasterKey(path: string): Buffer {

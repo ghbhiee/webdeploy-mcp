@@ -2,6 +2,27 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.15] - 2026-07-31
+
+### Added
+
+- Default app URLs, Vercel/Railway style: every project is now served out of the box at
+  `https://<platform-host><APP_BASE_PATH>/<slug>/` (default `/apps/<slug>/`) with no DNS
+  setup. The worker maintains one Nginx location config per project in `NGINX_APPS_DIR`
+  (default `/etc/nginx/webdeploy-apps.d/`), included from the platform's control snippet, and
+  refreshes it on every release activation and rollback; dynamic projects are proxied with
+  the prefix stripped (`X-Forwarded-Prefix` carries it), static projects are aliased to the
+  active release. Custom domains remain available via `set_custom_domain` and take over as
+  the reported public URL when set
+- New configuration: `APP_BASE_PATH` (default `/apps`), `NGINX_APPS_DIR`,
+  `NGINX_SNIPPET_FILE`
+
+### Changed
+
+- `get_project` and `get_deployment_status` always report a `publicUrl` now (default app URL
+  until a custom domain is configured); the MCP instructions tell agents a deployment is not
+  finished until the user has been given that link
+
 ## [0.1.14] - 2026-07-31
 
 ### Changed

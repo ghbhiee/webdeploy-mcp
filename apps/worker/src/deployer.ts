@@ -26,7 +26,14 @@ import {
   ensureProjectUsersGroup,
   ensureUserInProjectsGroup,
 } from "./hardening.js";
-import { activateNginxConfig, removeNginxConfig, renderNginxProject } from "./nginx.js";
+import {
+  activateAppNginxConfig,
+  activateNginxConfig,
+  removeAppNginxConfig,
+  removeNginxConfig,
+  renderNginxAppLocation,
+  renderNginxProject,
+} from "./nginx.js";
 import { restartReleaseProcess, startReleaseProcess, stopReleaseProcess } from "./pm2.js";
 
 export class Deployer {
@@ -473,6 +480,16 @@ export class Deployer {
       await symlink(staticRoot, candidate, "dir");
       await rename(candidate, current);
     }
+    const appContent = renderNginxAppLocation({
+      appBasePath: this.config.APP_BASE_PATH,
+      slug: project.slug,
+      projectId: project.id,
+      type: project.type,
+      currentPath: current,
+      port,
+      spaFallback: project.spa_fallback,
+    });
+    await activateAppNginxConfig(this.config, project.id, appContent);
     const domain = (
       await this.database.query(
         "SELECT hostname FROM project_domains WHERE project_id=$1 AND is_primary=true",
@@ -583,6 +600,7 @@ export class Deployer {
     for (const release of releases.rows) {
       await stopReleaseProcess(this.config, project.id, release.id);
     }
+    await removeAppNginxConfig(this.config, project.id);
     await removeNginxConfig(this.config, project.id);
     const projectRoot = safeChild(this.config.DATA_DIR, "projects", project.id);
     if (existsSync(projectRoot)) await rm(projectRoot, { recursive: true, force: true });

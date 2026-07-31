@@ -7,6 +7,7 @@ import {
   DeploymentService,
   PageService,
   ProjectService,
+  appDefaultPublicUrl,
   pageSitePublicUrl,
   type Config,
   type Database,
@@ -59,10 +60,10 @@ function createMcpServer(
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.14" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.15" },
     {
       instructions:
-        "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL (returned by get_deployment_status; configure one with set_custom_domain if missing). Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
+        "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL returned by get_deployment_status — every project is served at a default path under the platform host without any DNS setup; set_custom_domain can replace it with a dedicated hostname later. Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
     },
   );
   const read = () => requireScope(scopes, "platform:read");
@@ -73,14 +74,17 @@ function createMcpServer(
     content: [{ type: "text" as const, text }],
   });
   const publicUrl = (project: ProjectRecord) =>
-    project.primaryHostname ? `https://${project.primaryHostname}` : null;
+    project.primaryHostname
+      ? `https://${project.primaryHostname}`
+      : appDefaultPublicUrl(
+          dependencies.config.PUBLIC_URL,
+          dependencies.config.APP_BASE_PATH,
+          project.slug,
+        );
   const readiness = (project: ProjectRecord): string => {
     const notes: string[] = [];
     if (project.type !== "static" && !project.settings.startCommand) {
       notes.push("not deployable yet: set startCommand with configure_project");
-    }
-    if (!project.primaryHostname) {
-      notes.push("no public URL yet: set one with set_custom_domain");
     }
     return notes.length ? ` (${notes.join("; ")})` : "";
   };
@@ -125,7 +129,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.14", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.15", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },
@@ -378,9 +382,7 @@ function createMcpServer(
       const url = publicUrl(project);
       return result(
         { deployment, publicUrl: url },
-        url
-          ? `Deployment succeeded. ${project.name} is live at ${url} — tell the user this URL.`
-          : `Deployment succeeded, but ${project.name} has no domain yet. Use set_custom_domain, then tell the user the URL.`,
+        `Deployment succeeded. ${project.name} is live at ${url} — tell the user this URL. A custom domain can replace it later via set_custom_domain.`,
       );
     },
   );

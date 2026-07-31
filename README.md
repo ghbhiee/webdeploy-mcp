@@ -243,9 +243,11 @@ not present. Client-specific troubleshooting is covered in [MCP clients](docs/mc
 | `delete_page_site`            | Delete a Pages site and its files                  |
 
 The whole deployment lifecycle — create, configure, set environment, deploy, verify, get the
-live URL — runs over MCP. The Dashboard is the owner's read view and manual override: it shows
-what each MCP client installed, deployment history, and the live links, and can edit any
-setting by hand. Environment values can be written through MCP (encrypted at rest) but are
+live URL — runs over MCP. Every project is reachable immediately at
+`https://<platform-host>/apps/<slug>/` (configurable via `APP_BASE_PATH`), no DNS work
+required; a custom domain set with `set_custom_domain` replaces that default URL. The
+Dashboard is the owner's read view and manual override: it shows what each MCP client
+installed, deployment history, and the live links, and can edit any setting by hand. Environment values can be written through MCP (encrypted at rest) but are
 never readable back through any API; the Dashboard cannot display them either.
 
 ## Built-in static Pages
