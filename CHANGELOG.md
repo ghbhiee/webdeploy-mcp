@@ -2,6 +2,31 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.14] - 2026-07-31
+
+### Changed
+
+- The MCP interface now covers the full deployment lifecycle; the Dashboard is repositioned
+  as the owner's read view and manual override rather than a required step. Server
+  instructions direct agents to finish deployments entirely over MCP and to report the live
+  URL to the user afterwards
+- `create_project` accepts the full runtime settings inline, so a project can be created and
+  configured in one call
+- Deploying a `node`/`python` project without a start command now fails fast in the control
+  plane (`START_COMMAND_REQUIRED`, pointing at `configure_project`) instead of failing
+  minutes later in the worker
+- `get_deployment_status` of a succeeded deployment and `get_project` now return `publicUrl`
+  (the primary domain) so agents can hand the user a working link
+
+### Added
+
+- `configure_project` MCP tool: set git source, install/build/start commands, output
+  directory, service port, health check path, SPA fallback, runtime versions, auto-deploy,
+  and release retention — everything the Dashboard setup page can set (pass `null` to clear
+  a field)
+- `set_environment_variables` MCP tool (batch upsert, `plain` or `secret` kind; values are
+  encrypted at rest and never readable back) and `delete_environment_variable`
+
 ## [0.1.13] - 2026-07-31
 
 ### Fixed

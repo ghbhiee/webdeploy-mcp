@@ -21,8 +21,9 @@ and public URLs are installation settings.
 - PostgreSQL-backed jobs, releases, audit events, OAuth state, and encrypted settings
 - Passkey-only sign-in with administrator approval for every new enrollment
 - OAuth Authorization Code + PKCE, dynamic client registration, token expiry and revocation
-- MCP tools for project, deployment, log, release, domain, restart, rollback, and deletion tasks
-- Dashboard-only environment values encrypted with AES-256-GCM
+- MCP tools for the full lifecycle: project creation and configuration, environment variables,
+  deployment, logs, releases, domains, restart, rollback, and deletion
+- Environment values encrypted with AES-256-GCM; writable via MCP or Dashboard, readable by neither
 - Interactive install, verified release downloads, backup, restore, update, and uninstall
 
 ## Architecture
@@ -124,7 +125,9 @@ objects.
 
 ## Dashboard workflow
 
-Create a project, choose `static`, `node`, or `python`, then configure:
+Everything below can equally be driven by an agent over MCP; the Dashboard is the place to
+watch what agents did — projects, deployments, live links — and to override any setting by
+hand. Create a project, choose `static`, `node`, or `python`, then configure:
 
 - Git repository and branch/tag/commit
 - install and build commands
@@ -213,30 +216,37 @@ not present. Client-specific troubleshooting is covered in [MCP clients](docs/mc
 
 ## MCP tools
 
-| Tool                       | Purpose                                    |
-| -------------------------- | ------------------------------------------ |
-| `platform_status`          | Health and authenticated-user summary      |
-| `list_projects`            | Accessible projects                        |
-| `get_project`              | Project settings and environment metadata  |
-| `create_project`           | Create a project and return its setup URL  |
-| `deploy_project`           | Deploy configured Git source               |
-| `deploy_from_git`          | Deploy a Git URL/ref                       |
-| `deploy_inline_files`      | Deploy up to 100 small files (1 MiB total) |
-| `get_deployment_status`    | Deployment state                           |
-| `get_deployment_logs`      | Redacted build/deploy logs                 |
-| `list_releases`            | Release history                            |
-| `rollback_release`         | Queue an atomic rollback                   |
-| `restart_project`          | Restart an active dynamic project          |
-| `get_project_settings_url` | Passkey-protected Dashboard URL            |
-| `set_custom_domain`        | Configure the primary hostname             |
-| `delete_project`           | Queue project removal                      |
-| `create_page_site`         | Create a Pages directory + publish token   |
-| `list_page_sites`          | List Pages sites and public URLs           |
-| `publish_page`             | Publish static files to a Pages site       |
-| `rotate_page_token`        | Replace a Pages publish token              |
-| `delete_page_site`         | Delete a Pages site and its files          |
+| Tool                          | Purpose                                            |
+| ----------------------------- | -------------------------------------------------- |
+| `platform_status`             | Health and authenticated-user summary              |
+| `list_projects`               | Accessible projects                                |
+| `get_project`                 | Project settings, environment metadata, public URL |
+| `create_project`              | Create a project, optionally with runtime settings |
+| `configure_project`           | Update git source, commands, port, health check, … |
+| `set_environment_variables`   | Upsert env vars (`plain` or `secret`)              |
+| `delete_environment_variable` | Remove one env var                                 |
+| `deploy_project`              | Deploy configured Git source                       |
+| `deploy_from_git`             | Deploy a Git URL/ref                               |
+| `deploy_inline_files`         | Deploy up to 100 small files (1 MiB total)         |
+| `get_deployment_status`       | Deployment state; public URL on success            |
+| `get_deployment_logs`         | Redacted build/deploy logs                         |
+| `list_releases`               | Release history                                    |
+| `rollback_release`            | Queue an atomic rollback                           |
+| `restart_project`             | Restart an active dynamic project                  |
+| `get_project_settings_url`    | Passkey-protected Dashboard URL                    |
+| `set_custom_domain`           | Configure the primary hostname                     |
+| `delete_project`              | Queue project removal                              |
+| `create_page_site`            | Create a Pages directory + publish token           |
+| `list_page_sites`             | List Pages sites and public URLs                   |
+| `publish_page`                | Publish static files to a Pages site               |
+| `rotate_page_token`           | Replace a Pages publish token                      |
+| `delete_page_site`            | Delete a Pages site and its files                  |
 
-MCP intentionally has no tool that accepts or returns environment values.
+The whole deployment lifecycle — create, configure, set environment, deploy, verify, get the
+live URL — runs over MCP. The Dashboard is the owner's read view and manual override: it shows
+what each MCP client installed, deployment history, and the live links, and can edit any
+setting by hand. Environment values can be written through MCP (encrypted at rest) but are
+never readable back through any API; the Dashboard cannot display them either.
 
 ## Built-in static Pages
 
