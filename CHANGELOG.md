@@ -2,6 +2,23 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.17] - 2026-07-31
+
+### Fixed
+
+- The reported public URL no longer points at a dead hostname: a custom domain now counts as
+  the project's public URL only after its DNS actually resolves to the platform host
+  (`project_domains.verified_at`, previously written by nothing). Unverified domains fall
+  back to the default `/apps/<slug>/` URL in the Dashboard, `get_project`, and
+  `get_deployment_status`
+
+### Added
+
+- `set_custom_domain` verifies DNS immediately and reports `verified`; the new
+  `verify_domain` MCP tool (and `POST /api/projects/:id/domain/verify`) re-checks after DNS
+  records are added. The Dashboard settings tab shows a pending-DNS hint for unverified
+  domains
+
 ## [0.1.16] - 2026-07-31
 
 ### Added

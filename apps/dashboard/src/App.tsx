@@ -11,6 +11,7 @@ type Project = {
   status: string;
   ownerUsername: string;
   primaryHostname: string | null;
+  primaryDomainVerified?: boolean;
   publicUrl?: string;
   settings: Record<string, any>;
 };
@@ -766,6 +767,12 @@ function SettingsForm({
             inputMode="url"
           />
         </label>
+        {project.primaryHostname && !project.primaryDomainVerified && (
+          <p className="field-hint">
+            DNS for {project.primaryHostname} does not point at this server yet, so the default app
+            URL stays active. Add the DNS record, then save again to re-verify.
+          </p>
+        )}
       </section>
       <section className="panel">
         <h2>Source</h2>

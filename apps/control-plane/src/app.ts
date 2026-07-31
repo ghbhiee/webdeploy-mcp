@@ -46,7 +46,12 @@ export async function buildApp(config: Config = loadConfig()) {
   });
   const database = createDatabase(config.DATABASE_URL);
   const masterKey = loadMasterKey(config.MASTER_KEY_FILE);
-  const projects = new ProjectService(database, masterKey, config.RELEASE_RETENTION_DEFAULT);
+  const projects = new ProjectService(
+    database,
+    masterKey,
+    config.RELEASE_RETENTION_DEFAULT,
+    config.PUBLIC_URL,
+  );
   const deployments = new DeploymentService(database, projects);
   const pages = new PageService(database, config.DATA_DIR);
 
@@ -97,7 +102,7 @@ export async function buildApp(config: Config = loadConfig()) {
 
   app.get("/healthz", async () => {
     await database.query("SELECT 1");
-    return { status: "ok", version: "0.1.16" };
+    return { status: "ok", version: "0.1.17" };
   });
 
   await registerPasskeyRoutes(app, { database, config });

@@ -1,4 +1,5 @@
 import { domainToASCII } from "node:url";
+import { resolve4, resolve6 } from "node:dns/promises";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Database, DatabaseClient } from "./db.js";
 import { withTransaction } from "./db.js";
@@ -18,6 +19,7 @@ export interface ProjectRecord {
   status: string;
   currentReleaseId: string | null;
   primaryHostname: string | null;
+  primaryDomainVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
   settings: ProjectSettings;
@@ -43,6 +45,7 @@ function mapProject(row: any): ProjectRecord {
     status: row.status,
     currentReleaseId: row.current_release_id,
     primaryHostname: row.primary_hostname,
+    primaryDomainVerified: Boolean(row.primary_domain_verified_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     settings: {
@@ -69,7 +72,7 @@ const SELECT_PROJECT = `
   JOIN users u ON u.id = p.owner_id
   JOIN project_settings s ON s.project_id = p.id
   LEFT JOIN LATERAL (
-    SELECT hostname FROM project_domains
+    SELECT hostname, verified_at AS primary_domain_verified_at FROM project_domains
     WHERE project_id = p.id AND is_primary = true
     LIMIT 1
   ) pd ON true
@@ -80,6 +83,7 @@ export class ProjectService {
     private readonly database: Database,
     private readonly masterKey: Buffer,
     private readonly defaultRetention = 5,
+    private readonly publicUrl = "http://localhost",
   ) {}
 
   async list(actor: Actor): Promise<ProjectRecord[]> {
@@ -196,6 +200,35 @@ export class ProjectService {
     return this.get(actor, projectId);
   }
 
+  private async verifyDomainDns(hostname: string): Promise<boolean> {
+    const platformHost = new URL(this.publicUrl).hostname;
+    const [domainAddresses, platformAddresses] = await Promise.all([
+      resolveAddresses(hostname),
+      resolveAddresses(platformHost),
+    ]);
+    return addressSetsOverlap(domainAddresses, platformAddresses);
+  }
+
+  async verifyDomain(
+    actor: Actor,
+    projectId: string,
+  ): Promise<{ hostname: string; verified: boolean; platformHost: string }> {
+    const project = await this.get(actor, projectId);
+    if (!project.primaryHostname) {
+      throw new AppError("DOMAIN_NOT_CONFIGURED", "Set a custom domain first");
+    }
+    const verified = await this.verifyDomainDns(project.primaryHostname);
+    await this.database.query(
+      "UPDATE project_domains SET verified_at=$3 WHERE project_id=$1 AND hostname=$2",
+      [projectId, project.primaryHostname, verified ? new Date() : null],
+    );
+    return {
+      hostname: project.primaryHostname,
+      verified,
+      platformHost: new URL(this.publicUrl).hostname,
+    };
+  }
+
   async setDomain(actor: Actor, projectId: string, hostnameInput: string): Promise<string> {
     const project = await this.get(actor, projectId);
     requireProjectAccess(actor, project.ownerId);
@@ -209,15 +242,16 @@ export class ProjectService {
     ) {
       throw new AppError("INVALID_DOMAIN", "A valid fully-qualified domain name is required");
     }
+    const verified = await this.verifyDomainDns(hostname).catch(() => false);
     await withTransaction(this.database, async (client) => {
       await client.query("UPDATE project_domains SET is_primary=false WHERE project_id=$1", [
         projectId,
       ]);
       await client.query(
-        `INSERT INTO project_domains(project_id, hostname, is_primary)
-         VALUES($1,$2,true)
-         ON CONFLICT(hostname) DO UPDATE SET project_id=$1, is_primary=true`,
-        [projectId, hostname],
+        `INSERT INTO project_domains(project_id, hostname, is_primary, verified_at)
+         VALUES($1,$2,true,$3)
+         ON CONFLICT(hostname) DO UPDATE SET project_id=$1, is_primary=true, verified_at=$3`,
+        [projectId, hostname, verified ? new Date() : null],
       );
     });
     await writeAudit(this.database, {
@@ -225,7 +259,7 @@ export class ProjectService {
       action: "project.domain.set",
       targetType: "project",
       targetId: projectId,
-      metadata: { hostname },
+      metadata: { hostname, verified },
     });
     return hostname;
   }
@@ -474,6 +508,20 @@ export async function getProjectForWorker(
 ): Promise<any> {
   const result = await client.query(`${SELECT_PROJECT} WHERE p.id=$1`, [projectId]);
   return assertFound(result.rows[0], "Project not found");
+}
+
+export async function resolveAddresses(hostname: string): Promise<string[]> {
+  const [v4, v6] = await Promise.all([
+    resolve4(hostname).catch(() => [] as string[]),
+    resolve6(hostname).catch(() => [] as string[]),
+  ]);
+  return [...v4, ...v6];
+}
+
+export function addressSetsOverlap(left: string[], right: string[]): boolean {
+  if (!left.length || !right.length) return false;
+  const rightSet = new Set(right);
+  return left.some((address) => rightSet.has(address));
 }
 
 function validateRelativeDirectory(value: string | null | undefined): void {

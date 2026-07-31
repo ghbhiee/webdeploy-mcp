@@ -26,7 +26,7 @@ export function registerProjectRoutes(
 ): void {
   const { database, config, projects, deployments } = dependencies;
   const publicUrl = (project: ProjectRecord) =>
-    project.primaryHostname
+    project.primaryHostname && project.primaryDomainVerified
       ? `https://${project.primaryHostname}`
       : appDefaultPublicUrl(config.PUBLIC_URL, config.APP_BASE_PATH, project.slug);
   app.post("/api/webhooks/projects/:projectId", async (request) => {
@@ -94,10 +94,15 @@ export function registerProjectRoutes(
   });
   app.post("/api/projects/:projectId/domain", async (request) => {
     const { actor } = await requireSession(request, database, config, true);
+    const projectId = (request.params as any).projectId;
     const body = request.body as { hostname: string };
-    return {
-      hostname: await projects.setDomain(actor, (request.params as any).projectId, body.hostname),
-    };
+    const hostname = await projects.setDomain(actor, projectId, body.hostname);
+    const verification = await projects.verifyDomain(actor, projectId);
+    return { hostname, verified: verification.verified };
+  });
+  app.post("/api/projects/:projectId/domain/verify", async (request) => {
+    const { actor } = await requireSession(request, database, config, true);
+    return await projects.verifyDomain(actor, (request.params as any).projectId);
   });
   app.put("/api/projects/:projectId/environment/:name", async (request) => {
     const { actor } = await requireSession(request, database, config, true);

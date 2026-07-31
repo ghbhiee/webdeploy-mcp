@@ -60,7 +60,7 @@ function createMcpServer(
   scopes: Set<string>,
 ): McpServer {
   const server = new McpServer(
-    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.16" },
+    { name: dependencies.config.MCP_SERVER_NAME, version: "0.1.17" },
     {
       instructions:
         "The full deployment lifecycle is available here: create_project (optionally with settings), configure_project for runtime configuration, set_environment_variables, provision_database when the app needs PostgreSQL (DATABASE_URL is injected automatically), a deploy tool, then poll get_deployment_status until it reaches a terminal state. Never require the user to open the Dashboard to finish a deployment — it is the owner's read view and manual override, not part of the flow. After a successful deployment always tell the user the public URL returned by get_deployment_status — every project is served at a default path under the platform host without any DNS setup; set_custom_domain can replace it with a dedicated hostname later. Use get_project before mutating a project. Use kind=secret for sensitive environment values; offer the settingsUrl only when the user prefers to enter a secret themselves. Confirm with the user before delete_project or rollback_release. For one-off static pages, prefer publish_page (the built-in Pages site of this account) instead of creating a project per page.",
@@ -74,7 +74,7 @@ function createMcpServer(
     content: [{ type: "text" as const, text }],
   });
   const publicUrl = (project: ProjectRecord) =>
-    project.primaryHostname
+    project.primaryHostname && project.primaryDomainVerified
       ? `https://${project.primaryHostname}`
       : appDefaultPublicUrl(
           dependencies.config.PUBLIC_URL,
@@ -129,7 +129,7 @@ function createMcpServer(
     async () => {
       read();
       return result(
-        { status: "ok", version: "0.1.16", authenticatedUser: actor.username },
+        { status: "ok", version: "0.1.17", authenticatedUser: actor.username },
         "WebDeploy MCP is operating normally.",
       );
     },
@@ -500,9 +500,33 @@ function createMcpServer(
     async ({ projectId, hostname }) => {
       projectWrite();
       const normalized = await dependencies.projects.setDomain(actor, projectId, hostname);
+      const verification = await dependencies.projects.verifyDomain(actor, projectId);
       return result(
-        { hostname: normalized, httpsStatus: "pending" },
-        `Domain ${normalized} was saved. Complete DNS validation in the Dashboard.`,
+        { hostname: normalized, verified: verification.verified },
+        verification.verified
+          ? `Domain ${normalized} was saved and DNS is verified; it is now the project's public URL.`
+          : `Domain ${normalized} was saved but its DNS does not point at ${verification.platformHost} yet, so the default app URL stays active. Add an A/AAAA record matching ${verification.platformHost}, then call verify_domain.`,
+      );
+    },
+  );
+
+  server.registerTool(
+    "verify_domain",
+    {
+      title: "Verify custom domain DNS",
+      description:
+        "Re-check that the project's custom domain resolves to this platform. Once verified, the domain becomes the project's public URL.",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ projectId }) => {
+      projectWrite();
+      const verification = await dependencies.projects.verifyDomain(actor, projectId);
+      return result(
+        { ...verification },
+        verification.verified
+          ? `${verification.hostname} is verified and now serves as the public URL.`
+          : `${verification.hostname} still does not resolve to ${verification.platformHost}; the default app URL stays active.`,
       );
     },
   );
