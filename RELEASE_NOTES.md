@@ -1,9 +1,17 @@
-# WebDeploy MCP v0.1.12
+# WebDeploy MCP v0.1.13
 
 This release fixes Claude Code OAuth sign-in and includes v0.1.9's Pages service and
 deployment lock hardening.
 
 ## Highlights
+
+- Deployments failing with `cannot lock /etc/group` are fixed at the true root cause: the
+  worker's `ProtectSystem=full` sandbox made `/etc` read-only, so shadow-utils could never
+  create its lock files. The unit now uses `ProtectSystem=true`, and `webdeploy update`
+  refreshes the systemd unit and operator scripts on every update.
+
+  **Existing installations:** run `sudo webdeploy update` twice, or apply the unit change once
+  manually — updates before v0.1.13 do not refresh the unit file.
 
 - Stale `/etc/passwd.lock`-style lock files left by crashed processes are detected by holder
   PID and removed automatically during deployment retries; locks held by a live process are
@@ -27,7 +35,7 @@ deployment lock hardening.
 
 ## Release assets
 
-- `webdeploy-mcp-v0.1.12.tar.gz` — versioned source bundle
+- `webdeploy-mcp-v0.1.13.tar.gz` — versioned source bundle
 - `install.sh` — inspectable bootstrap installer
 - `SHA256SUMS` — SHA-256 checksums
 

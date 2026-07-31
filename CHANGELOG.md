@@ -2,6 +2,19 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.13] - 2026-07-31
+
+### Fixed
+
+- The real cause of every `useradd`/`groupadd: cannot lock` deployment failure: the worker's
+  systemd sandbox used `ProtectSystem=full`, which mounts `/etc` read-only, and per-file
+  `ReadWritePaths` entries cannot allow shadow-utils to create its lock and temp files inside
+  `/etc`. The unit now uses `ProtectSystem=true` (protects `/usr` and `/boot`; `/etc` writable,
+  which the worker legitimately manages)
+- `webdeploy update` now refreshes the worker systemd unit and the update/uninstall operator
+  scripts from the new release; previously unit and script fixes never reached existing
+  installations
+
 ## [0.1.12] - 2026-07-31
 
 ### Fixed

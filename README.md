@@ -7,8 +7,8 @@ static sites, frontend builds, Node.js services, and Python web applications wit
 The project is server-, IP-, and domain-agnostic. All paths, ports, hostnames, retention limits,
 and public URLs are installation settings.
 
-> **Release status:** v0.1.12 auto-recovers from stale system user database lock files during
-> deployment, on top of v0.1.11's Claude Code OAuth fixes and v0.1.9's Pages service.
+> **Release status:** v0.1.13 fixes the worker sandbox that made every project-user creation
+> fail with `cannot lock /etc/group`, and makes updates refresh the systemd unit.
 
 ## What it provides
 

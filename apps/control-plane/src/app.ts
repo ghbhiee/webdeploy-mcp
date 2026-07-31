@@ -97,7 +97,7 @@ export async function buildApp(config: Config = loadConfig()) {
 
   app.get("/healthz", async () => {
     await database.query("SELECT 1");
-    return { status: "ok", version: "0.1.12" };
+    return { status: "ok", version: "0.1.13" };
   });
 
   await registerPasskeyRoutes(app, { database, config });

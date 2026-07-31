@@ -28,6 +28,15 @@ mkdir -p "$(dirname "$backup")"
 pg_dump --format=custom --file "$backup" "$DATABASE_URL"
 (cd "$target"; node packages/core/dist/migrate-cli.js)
 previous="$(readlink -f "$INSTALL_ROOT/current")"
+# Refresh the worker unit and operator scripts from the new release so fixes
+# to them reach existing installations. (A refreshed update.sh takes effect on
+# the next update run.)
+sed -e "s#/etc/webdeploy#$CONFIG_DIR#g" -e "s#/opt/webdeploy#$INSTALL_ROOT#g" \
+  -e "s#/var/lib/webdeploy#$DATA_DIR#g" "$target/installer/webdeploy-worker.service" \
+  >/etc/systemd/system/webdeploy-worker.service
+systemctl daemon-reload
+install -m 0755 "$target/installer/update.sh" "$CONFIG_DIR/update.sh"
+install -m 0755 "$target/installer/uninstall.sh" "$CONFIG_DIR/uninstall.sh"
 ln -sfn "$target" "$INSTALL_ROOT/current"
 if ! webdeploy restart; then
   ln -sfn "$previous" "$INSTALL_ROOT/current"

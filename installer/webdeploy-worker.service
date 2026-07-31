@@ -14,8 +14,13 @@ Restart=always
 RestartSec=3
 NoNewPrivileges=false
 PrivateTmp=true
-ProtectSystem=full
-ReadWritePaths=/var/lib/webdeploy /etc/nginx /run /etc/webdeploy /etc/passwd /etc/shadow /etc/group /etc/gshadow /etc/subuid /etc/subgid
+# ProtectSystem=full makes /etc read-only, and per-file ReadWritePaths cannot
+# help: shadow-utils (useradd/groupadd/usermod) must CREATE lock and temp
+# files inside /etc (/etc/group.<pid>, /etc/group.lock, rename-on-commit), so
+# every invocation fails with "cannot lock ...; try again later". The worker
+# legitimately manages /etc (user database, nginx, sshd drop-in); protect
+# /usr and /boot only.
+ProtectSystem=true
 ProtectHome=true
 RestrictSUIDSGID=false
 LockPersonality=true
