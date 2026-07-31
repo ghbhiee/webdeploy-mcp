@@ -226,6 +226,7 @@ function ProjectsPage({
       ) : (
         <EmptyState onCreate={() => setCreating(true)} />
       )}
+      <PagesSection show={show} />
       {creating && (
         <Modal title="Create a project" onClose={() => setCreating(false)}>
           <ProjectCreateForm
@@ -625,6 +626,90 @@ function ProjectPage({
         />
       )}
     </>
+  );
+}
+
+type PageSite = {
+  slug: string;
+  name: string;
+  publishedAt: string | null;
+  publicUrl: string;
+};
+
+type PageEntry = {
+  name: string;
+  kind: "directory" | "file";
+  publicUrl: string;
+};
+
+function PagesSection({ show }: { show: (kind: "error" | "success", text: string) => void }) {
+  const [sites, setSites] = useState<PageSite[] | null>(null);
+  const [entries, setEntries] = useState<Record<string, PageEntry[]>>({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const value = await api<{ sites: PageSite[] }>("/api/pages-sites");
+        if (cancelled) return;
+        setSites(value.sites);
+        const loaded = await Promise.all(
+          value.sites.map(async (site) => {
+            const result = await api<{ entries: PageEntry[] }>(
+              `/api/pages-sites/${site.slug}/entries`,
+            );
+            return [site.slug, result.entries] as const;
+          }),
+        );
+        if (!cancelled) setEntries(Object.fromEntries(loaded));
+      } catch (error) {
+        if (!cancelled) show("error", message(error));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [show]);
+  if (!sites?.length) return null;
+  return (
+    <section aria-label="Pages sites">
+      <header className="page-header compact">
+        <div>
+          <p className="eyebrow">Built-in static hosting</p>
+          <h1>Pages</h1>
+          <p>One-off static pages published without a full project.</p>
+        </div>
+      </header>
+      {sites.map((site) => (
+        <section className="panel pages-site" key={site.slug}>
+          <div className="pages-site-head">
+            <div>
+              <h2>{site.name}</h2>
+              <a className="live-link" href={site.publicUrl} target="_blank" rel="noreferrer">
+                {site.publicUrl.replace(/^https?:\/\//, "")} ↗
+              </a>
+            </div>
+            <small>
+              {site.publishedAt
+                ? `Published ${new Date(site.publishedAt).toLocaleString()}`
+                : "Never published"}
+            </small>
+          </div>
+          {entries[site.slug]?.length ? (
+            <ul className="pages-entries">
+              {entries[site.slug]!.map((entry) => (
+                <li key={entry.name}>
+                  <a href={entry.publicUrl} target="_blank" rel="noreferrer">
+                    {entry.kind === "directory" ? `${entry.name}/` : entry.name} ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="pages-empty">No published files yet.</p>
+          )}
+        </section>
+      ))}
+    </section>
   );
 }
 

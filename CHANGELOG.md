@@ -2,6 +2,17 @@
 
 All notable changes follow semantic versioning.
 
+## [0.1.19] - 2026-07-31
+
+### Added
+
+- The Dashboard now shows the built-in Pages sites: a "Pages" section under the project list
+  with each site's name, public URL, publish time, and — new — every top-level entry
+  (subdirectory or file) of the site as a clickable link, so one-off pages published into
+  subdirectories are all reachable from the Dashboard
+- Session-authenticated read API backing it: `GET /api/pages-sites` and
+  `GET /api/pages-sites/:slug/entries`
+
 ## [0.1.18] - 2026-07-31
 
 ### Fixed

@@ -102,12 +102,12 @@ export async function buildApp(config: Config = loadConfig()) {
 
   app.get("/healthz", async () => {
     await database.query("SELECT 1");
-    return { status: "ok", version: "0.1.18" };
+    return { status: "ok", version: "0.1.19" };
   });
 
   await registerPasskeyRoutes(app, { database, config });
   registerProjectRoutes(app, { database, config, projects, deployments });
-  await registerPagesRoutes(app, { config, pages });
+  await registerPagesRoutes(app, { config, pages, database });
   registerAdminRoutes(app, database, config);
   const oauth = await createOAuthRuntime(app, database, config);
   registerMcpRoute(app, { database, config, projects, deployments, pages, oauth });

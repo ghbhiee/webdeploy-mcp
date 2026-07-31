@@ -9,8 +9,10 @@ import {
   PageService,
   pageSitePublicUrl,
   type Config,
+  type Database,
   type PageSiteRecord,
 } from "@webdeploy/core";
+import { requireSession } from "./session.js";
 
 const publishSchema = z.object({
   files: z
@@ -38,9 +40,30 @@ export function pageSiteSummary(config: Config, site: PageSiteRecord): Record<st
 
 export async function registerPagesRoutes(
   app: FastifyInstance,
-  dependencies: { config: Config; pages: PageService },
+  dependencies: { config: Config; pages: PageService; database: Database },
 ): Promise<void> {
-  const { config, pages } = dependencies;
+  const { config, pages, database } = dependencies;
+
+  // Session-authenticated read API for the Dashboard: the account's Pages
+  // sites and each site's top-level entries with their public URLs.
+  app.get("/api/pages-sites", async (request) => {
+    const { actor } = await requireSession(request, database, config);
+    const sites = await pages.listSites(actor);
+    return { sites: sites.map((site) => pageSiteSummary(config, site)) };
+  });
+  app.get("/api/pages-sites/:slug/entries", async (request) => {
+    const { actor } = await requireSession(request, database, config);
+    const slug = (request.params as any).slug as string;
+    const site = await pages.getSite(actor, slug);
+    const baseUrl = pageSitePublicUrl(config.PUBLIC_URL, site.slug).replace(/\/+$/, "");
+    const entries = await pages.listEntries(actor, slug);
+    return {
+      entries: entries.map((entry) => ({
+        ...entry,
+        publicUrl: `${baseUrl}/${entry.name}${entry.kind === "directory" ? "/" : ""}`,
+      })),
+    };
+  });
 
   // Public, unauthenticated serving of every published site below one root:
   // GET /pages/<slug>/... maps to DATA_DIR/pages/<slug>/...
@@ -115,7 +138,10 @@ export async function registerPagesRoutes(
           const site = await authenticate(request);
           const parsed = publishSchema.safeParse(request.body);
           if (!parsed.success) {
-            throw new AppError("INVALID_PUBLISH_BODY", parsed.error.issues[0]?.message ?? "Invalid body");
+            throw new AppError(
+              "INVALID_PUBLISH_BODY",
+              parsed.error.issues[0]?.message ?? "Invalid body",
+            );
           }
           const published = await pages.publishFiles(site, parsed.data.files, {
             clean: parsed.data.clean,

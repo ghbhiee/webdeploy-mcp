@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Database } from "./db.js";
 import { withTransaction } from "./db.js";
@@ -22,6 +22,11 @@ export interface PageSiteRecord {
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface PageSiteEntry {
+  name: string;
+  kind: "directory" | "file";
 }
 
 export interface PageFileInput {
@@ -51,7 +56,9 @@ export function assertSafePagePath(path: string): string {
     !normalized ||
     normalized.startsWith("/") ||
     /^[A-Za-z]:/.test(normalized) ||
-    normalized.split("/").some((segment) => segment === ".." || segment === "" || segment === ".") ||
+    normalized
+      .split("/")
+      .some((segment) => segment === ".." || segment === "" || segment === ".") ||
     normalized.includes("\0")
   ) {
     throw new AppError("INVALID_PAGE_PATH", `Unsafe page file path: ${path}`);
@@ -161,6 +168,22 @@ export class PageService {
     return result.rows.map(mapSite);
   }
 
+  async listEntries(actor: Actor, slug: string): Promise<PageSiteEntry[]> {
+    const site = await this.getSite(actor, slug);
+    const entries = await readdir(this.siteRoot(site.slug), { withFileTypes: true }).catch(
+      () => [],
+    );
+    return entries
+      .filter((entry) => !entry.name.startsWith("."))
+      .map((entry) => ({
+        name: entry.name,
+        kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
+      }))
+      .sort((a, b) =>
+        a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1,
+      );
+  }
+
   async getSite(actor: Actor, slug: string): Promise<PageSiteRecord> {
     const result = await this.database.query(`${SELECT_SITE} WHERE s.slug = $1`, [slug]);
     const site = assertFound(result.rows[0], "Pages site not found");
@@ -256,7 +279,13 @@ export class PageService {
         await mkdir(dirname(target), { recursive: true });
         await writeFile(target, file.content, { mode: 0o644 });
       }
-      if (await stat(siteRoot).then(() => true, () => false)) await rename(siteRoot, trash);
+      if (
+        await stat(siteRoot).then(
+          () => true,
+          () => false,
+        )
+      )
+        await rename(siteRoot, trash);
       await rename(staging, siteRoot);
       await rm(trash, { recursive: true, force: true });
     } else {

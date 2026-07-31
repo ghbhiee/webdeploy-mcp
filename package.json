@@ -1,6 +1,6 @@
 {
   "name": "webdeploy-mcp",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "private": true,
   "description": "A self-hosted website deployment platform with a web dashboard and MCP interface.",
   "license": "Apache-2.0",
